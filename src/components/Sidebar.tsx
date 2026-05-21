@@ -5,10 +5,9 @@ import {
   Infinity,
   Code,
   Box,
-  FolderOpen,
+  Scissors,
   Settings,
   LayoutGrid,
-  Flame,
   HelpCircle,
   MessageSquare,
   ChevronLeft,
@@ -20,15 +19,14 @@ const mainNavItems = [
   { icon: Home, label: '首页', path: '/' },
   { icon: MessageSquare, label: '文字聊天', path: '/chat' },
   { icon: Infinity, label: '无限画布', path: '/canvas' },
+  { icon: Scissors, label: '剪辑', path: '/edit' },
   { icon: Code, label: 'API接口', path: '/api-docs' },
   { icon: Box, label: '模型广场', path: '/models' },
-  { icon: FolderOpen, label: '作品管理', path: '/works' },
   { icon: Settings, label: '设置', path: '/settings' },
 ]
 
 const extraNavItems = [
   { icon: LayoutGrid, label: '模板推荐', badge: 'HOT', path: '/templates' },
-  { icon: Flame, label: '热门风格', badge: 'NEW', path: '/trending' },
   { icon: HelpCircle, label: '帮助中心', path: '/help' },
   { icon: MessageSquare, label: '反馈入口', path: '/feedback' },
 ]

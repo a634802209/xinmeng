@@ -42,12 +42,12 @@ export default function Home() {
         <TopBar />
         <main className="flex-1 overflow-hidden p-6">
           <StatsBar />
-          <div className="flex gap-4 h-[calc(100%-60px)] items-end">
-            {/* Middle Generate Panel - narrow, scrollable, aligned to bottom */}
+          <div className="flex gap-4 h-[calc(100%-60px)]">
+            {/* Middle Generate Panel - narrow, scrollable */}
             <div className={`transition-all duration-300 overflow-y-auto ${rightCollapsed ? 'flex-1' : 'w-[20%] min-w-[280px]'}`}>
               <GeneratePanel />
             </div>
-            {/* Right Result Panel with collapse - maximized, flex layout, aligned bottom */}
+            {/* Right Result Panel with collapse - maximized, flex layout, same height as generate panel */}
             <div className={`relative flex transition-all duration-300 h-full ${rightCollapsed ? 'w-0 overflow-hidden' : 'flex-1'}`}>
               <div className={`flex-1 h-full flex flex-col ${rightCollapsed ? 'hidden' : 'block'}`}>
                 <ResultPanel />
