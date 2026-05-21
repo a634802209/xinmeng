@@ -11,6 +11,8 @@ import {
   Loader2,
   Users,
   Clock,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react'
 import { generateApi } from '@/lib/api'
 import { useGenerateStore } from '@/store/generateStore'
@@ -240,6 +242,64 @@ export default function ResultPanel() {
     </div>
   )
 
+  // Mock data for demo
+  const [mockResults] = useState([
+    { id: '1', url: 'https://images.unsplash.com/photo-1682687220742-aba13b6e50ba?w=400&h=300&fit=crop', type: 'image', prompt: '赛博朋克城市夜景' },
+    { id: '2', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&h=300&fit=crop', type: 'image', prompt: '抽象艺术背景' },
+    { id: '3', url: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=400&h=300&fit=crop', type: 'image', prompt: '水彩风景画' },
+    { id: '4', url: 'https://images.unsplash.com/photo-1549490349-8643362247b5?w=400&h=300&fit=crop', type: 'image', prompt: '未来科技概念' },
+  ])
+
+  const handleDelete = (id: string) => {
+    // In real app, this would delete from store/backend
+    console.log('Delete item:', id)
+  }
+
+  const handleRegenerate = (prompt: string) => {
+    // In real app, this would trigger a new generation with the same prompt
+    console.log('Regenerate:', prompt)
+  }
+
+  const renderResultItem = (item: any, index: number) => (
+    <div key={item.id || index} className="relative group rounded-xl overflow-hidden">
+      <img src={item.url} alt="generated" className="w-full h-36 object-cover" />
+      {/* Top-right: Download + Delete buttons */}
+      <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => {
+            const a = document.createElement('a')
+            a.href = item.url
+            a.download = `generated-${index + 1}.png`
+            a.target = '_blank'
+            a.click()
+          }}
+          className="p-1.5 bg-black/60 backdrop-blur-sm text-white rounded-lg hover:bg-black/80 transition-all"
+          title="下载"
+        >
+          <Download className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={() => handleDelete(item.id)}
+          className="p-1.5 bg-black/60 backdrop-blur-sm text-white rounded-lg hover:bg-red-500/80 transition-all"
+          title="删除"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {/* Bottom-left: Regenerate button */}
+      <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => handleRegenerate(item.prompt)}
+          className="flex items-center gap-1 px-2.5 py-1.5 bg-black/60 backdrop-blur-sm text-white rounded-lg hover:bg-black/80 transition-all text-xs"
+          title="再来一次"
+        >
+          <RotateCcw className="w-3 h-3" />
+          再来一次
+        </button>
+      </div>
+    </div>
+  )
+
   return (
     <div className="flex flex-col h-full gap-4">
       {/* Top: Generate Result - stretches up to align with search box, fills remaining space */}
@@ -270,34 +330,9 @@ export default function ResultPanel() {
 
         {currentTask?.status === 'completed' && currentTask.result ? (
           <div className="grid grid-cols-2 gap-2">
-            {currentTask.result.map((url: string, i: number) => (
-              <div key={i} className="relative group rounded-xl overflow-hidden">
-                <img src={url} alt="generated" className="w-full h-32 object-cover" />
-                {/* Floating action buttons - appear on hover */}
-                <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => {
-                      const a = document.createElement('a')
-                      a.href = url
-                      a.download = `generated-${i + 1}.png`
-                      a.target = '_blank'
-                      a.click()
-                    }}
-                    className="p-1.5 bg-black/60 backdrop-blur-sm text-white rounded-lg hover:bg-black/80 transition-all"
-                    title="下载"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => window.open(url, '_blank')}
-                    className="p-1.5 bg-black/60 backdrop-blur-sm text-white rounded-lg hover:bg-black/80 transition-all"
-                    title="放大查看"
-                  >
-                    <ZoomIn className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+            {currentTask.result.map((url: string, i: number) =>
+              renderResultItem({ id: `task-${i}`, url, type: 'image', prompt: currentTask.prompt }, i)
+            )}
           </div>
         ) : currentTask?.status === 'processing' || currentTask?.status === 'pending' ? (
           <div className="flex flex-col items-center justify-center py-6">
@@ -313,15 +348,9 @@ export default function ResultPanel() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-6">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-2">
-              <Mountain className="w-6 h-6 text-slate-300" />
-            </div>
-            <p className="text-slate-500 font-medium text-sm mb-1">暂无生成结果</p>
-            <p className="text-slate-400 text-xs mb-3">快去左侧输入你的创意，生成第一张作品吧！</p>
-            <button className="px-4 py-1.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl text-xs font-medium hover:shadow-lg transition-all">
-              去生成
-            </button>
+          /* Mock results for demo */
+          <div className="grid grid-cols-2 gap-2">
+            {mockResults.map((item, i) => renderResultItem(item, i))}
           </div>
         )}
       </div>

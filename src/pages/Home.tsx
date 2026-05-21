@@ -4,7 +4,6 @@ import TopBar from '@/components/TopBar'
 import StatsBar from '@/components/StatsBar'
 import GeneratePanel from '@/components/GeneratePanel'
 import ResultPanel from '@/components/ResultPanel'
-import RightToolbar from '@/components/RightToolbar'
 import { useUserSync } from '@/hooks/useUserSync'
 
 export default function Home() {
@@ -73,8 +72,6 @@ export default function Home() {
         </main>
       </div>
 
-      {/* Far Right Toolbar */}
-      <RightToolbar />
     </div>
   )
 }
