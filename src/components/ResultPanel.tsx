@@ -273,15 +273,28 @@ export default function ResultPanel() {
             {currentTask.result.map((url: string, i: number) => (
               <div key={i} className="relative group rounded-xl overflow-hidden">
                 <img src={url} alt="generated" className="w-full h-32 object-cover" />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                  <div className="flex gap-2">
-                    <button className="p-1.5 bg-white/90 rounded-lg hover:bg-white transition-all">
-                      <Download className="w-3 h-3 text-slate-700" />
-                    </button>
-                    <button className="p-1.5 bg-white/90 rounded-lg hover:bg-white transition-all">
-                      <ZoomIn className="w-3 h-3 text-slate-700" />
-                    </button>
-                  </div>
+                {/* Floating action buttons - appear on hover */}
+                <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => {
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `generated-${i + 1}.png`
+                      a.target = '_blank'
+                      a.click()
+                    }}
+                    className="p-1.5 bg-black/60 backdrop-blur-sm text-white rounded-lg hover:bg-black/80 transition-all"
+                    title="下载"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => window.open(url, '_blank')}
+                    className="p-1.5 bg-black/60 backdrop-blur-sm text-white rounded-lg hover:bg-black/80 transition-all"
+                    title="放大查看"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             ))}
