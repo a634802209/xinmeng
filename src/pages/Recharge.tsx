@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, Check, Shield } from 'lucide-react'
-import Sidebar from '@/components/Sidebar'
+import { Check, Shield } from 'lucide-react'
+import Layout from '@/components/Layout'
 
 const PRESET_AMOUNTS = [10, 20, 50, 100, 200]
 
@@ -42,7 +41,6 @@ const PAYMENT_METHODS = [
 ]
 
 export default function Recharge() {
-  const navigate = useNavigate()
   const [selectedAmount, setSelectedAmount] = useState(50)
   const [customAmount, setCustomAmount] = useState('')
   const [isCustom, setIsCustom] = useState(false)
@@ -70,127 +68,112 @@ export default function Recharge() {
   const finalAmount = isCustom ? (parseInt(customAmount) || 0) : selectedAmount
 
   return (
-    <div className="h-screen bg-white flex overflow-hidden">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top Bar */}
-        <header className="h-16 bg-white border-b border-slate-100 flex items-center justify-between px-6 shrink-0">
-          <div className="flex items-center gap-4">
+    <Layout
+      title="充值中心"
+      showBack={true}
+      showTopBar={false}
+      rightContent={
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-slate-500">当前余额</span>
+          <span className="text-lg font-semibold text-slate-900">12,860</span>
+        </div>
+      }
+    >
+      <div className="max-w-3xl mx-auto py-10 px-6">
+        {/* Recharge Amount */}
+        <div className="mb-8">
+          <h3 className="text-base font-medium text-slate-900 mb-4">充值金额（单位：元）</h3>
+          <div className="grid grid-cols-6 gap-3">
+            {PRESET_AMOUNTS.map((amount) => (
+              <button
+                key={amount}
+                onClick={() => handleAmountClick(amount)}
+                className={`relative py-3 px-4 rounded-xl border-2 text-center transition-all ${
+                  !isCustom && selectedAmount === amount
+                    ? 'border-blue-500 bg-blue-50 text-blue-600'
+                    : 'border-slate-200 text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                <span className="text-sm font-medium">{amount}元</span>
+                {!isCustom && selectedAmount === amount && (
+                  <div className="absolute top-0 right-0 w-5 h-5 bg-blue-500 rounded-bl-lg flex items-center justify-center">
+                    <Check className="w-3 h-3 text-white" />
+                  </div>
+                )}
+              </button>
+            ))}
             <button
-              onClick={() => navigate('/')}
-              className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"
+              onClick={handleCustomClick}
+              className={`relative py-3 px-4 rounded-xl border-2 text-center transition-all ${
+                isCustom
+                  ? 'border-blue-500 bg-blue-50 text-blue-600'
+                  : 'border-slate-200 text-slate-700 hover:border-slate-300'
+              }`}
             >
-              <ChevronLeft className="w-5 h-5" />
-              <span className="text-base font-medium">充值中心</span>
+              <span className="text-sm font-medium">其他金额</span>
+              {isCustom && (
+                <div className="absolute top-0 right-0 w-5 h-5 bg-blue-500 rounded-bl-lg flex items-center justify-center">
+                  <Check className="w-3 h-3 text-white" />
+                </div>
+              )}
             </button>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-500">当前余额</span>
-            <span className="text-lg font-semibold text-slate-900">12,860</span>
-          </div>
-        </header>
-
-        {/* Main Content */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-3xl mx-auto py-10 px-6">
-            {/* Recharge Amount */}
-            <div className="mb-8">
-              <h3 className="text-base font-medium text-slate-900 mb-4">充值金额（单位：元）</h3>
-              <div className="grid grid-cols-6 gap-3">
-                {PRESET_AMOUNTS.map((amount) => (
-                  <button
-                    key={amount}
-                    onClick={() => handleAmountClick(amount)}
-                    className={`relative py-3 px-4 rounded-xl border-2 text-center transition-all ${
-                      !isCustom && selectedAmount === amount
-                        ? 'border-blue-500 bg-blue-50 text-blue-600'
-                        : 'border-slate-200 text-slate-700 hover:border-slate-300'
-                    }`}
-                  >
-                    <span className="text-sm font-medium">{amount}元</span>
-                    {!isCustom && selectedAmount === amount && (
-                      <div className="absolute top-0 right-0 w-5 h-5 bg-blue-500 rounded-bl-lg flex items-center justify-center">
-                        <Check className="w-3 h-3 text-white" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-                <button
-                  onClick={handleCustomClick}
-                  className={`relative py-3 px-4 rounded-xl border-2 text-center transition-all ${
-                    isCustom
-                      ? 'border-blue-500 bg-blue-50 text-blue-600'
-                      : 'border-slate-200 text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  <span className="text-sm font-medium">其他金额</span>
-                  {isCustom && (
-                    <div className="absolute top-0 right-0 w-5 h-5 bg-blue-500 rounded-bl-lg flex items-center justify-center">
-                      <Check className="w-3 h-3 text-white" />
-                    </div>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Custom Amount Input */}
-            <div className="mb-8">
-              <h3 className="text-base font-medium text-slate-900 mb-4">自定义金额（元）</h3>
-              <input
-                type="text"
-                value={customAmount}
-                onChange={handleCustomChange}
-                placeholder="请输入充值金额"
-                className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
-              />
-            </div>
-
-            {/* Payment Method */}
-            <div className="mb-8">
-              <h3 className="text-base font-medium text-slate-900 mb-4">支付方式</h3>
-              <div className="grid grid-cols-3 gap-3">
-                {PAYMENT_METHODS.map((method) => (
-                  <button
-                    key={method.id}
-                    onClick={() => setPaymentMethod(method.id)}
-                    className={`relative flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
-                      paymentMethod === method.id
-                        ? 'border-blue-500 bg-blue-50/50'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    {method.icon}
-                    <span className="text-sm font-medium text-slate-900">
-                      {method.name}
-                    </span>
-                    {paymentMethod === method.id && (
-                      <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                        <Check className="w-3 h-3 text-white" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Recharge Button */}
-            <button
-              disabled={finalAmount <= 0}
-              className="w-full py-3.5 bg-blue-600 text-white text-base font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              立即充值
-            </button>
-
-            {/* Security Note */}
-            <div className="mt-4 flex items-center justify-center gap-1.5 text-slate-400">
-              <Shield className="w-4 h-4" />
-              <span className="text-xs">安全支付保障中，您的信息将严格保密</span>
-            </div>
           </div>
         </div>
+
+        {/* Custom Amount Input */}
+        <div className="mb-8">
+          <h3 className="text-base font-medium text-slate-900 mb-4">自定义金额（元）</h3>
+          <input
+            type="text"
+            value={customAmount}
+            onChange={handleCustomChange}
+            placeholder="请输入充值金额"
+            className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
+          />
+        </div>
+
+        {/* Payment Method */}
+        <div className="mb-8">
+          <h3 className="text-base font-medium text-slate-900 mb-4">支付方式</h3>
+          <div className="grid grid-cols-3 gap-3">
+            {PAYMENT_METHODS.map((method) => (
+              <button
+                key={method.id}
+                onClick={() => setPaymentMethod(method.id)}
+                className={`relative flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                  paymentMethod === method.id
+                    ? 'border-blue-500 bg-blue-50/50'
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {method.icon}
+                <span className="text-sm font-medium text-slate-900">
+                  {method.name}
+                </span>
+                {paymentMethod === method.id && (
+                  <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                    <Check className="w-3 h-3 text-white" />
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Recharge Button */}
+        <button
+          disabled={finalAmount <= 0}
+          className="w-full py-3.5 bg-blue-600 text-white text-base font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          立即充值
+        </button>
+
+        {/* Security Note */}
+        <div className="mt-4 flex items-center justify-center gap-1.5 text-slate-400">
+          <Shield className="w-4 h-4" />
+          <span className="text-xs">安全支付保障中，您的信息将严格保密</span>
+        </div>
       </div>
-    </div>
+    </Layout>
   )
 }

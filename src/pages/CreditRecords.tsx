@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Receipt, TrendingDown, TrendingUp, Wallet, CreditCard } from 'lucide-react'
+import { Receipt, TrendingDown, TrendingUp, Wallet, CreditCard } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
+import Layout from '@/components/Layout'
 
 interface CreditRecord {
   id: number
@@ -19,7 +19,6 @@ interface CreditStats {
 }
 
 export default function CreditRecords() {
-  const navigate = useNavigate()
   const { token, user } = useAuthStore()
   const [records, setRecords] = useState<CreditRecord[]>([])
   const [stats, setStats] = useState<CreditStats | null>(null)
@@ -58,20 +57,8 @@ export default function CreditRecords() {
   }, [page])
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="h-16 bg-white border-b border-slate-100 flex items-center px-6">
-        <button
-          onClick={() => navigate('/')}
-          className="flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-all"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">返回</span>
-        </button>
-        <h1 className="ml-4 text-lg font-bold text-slate-800">余额明细</h1>
-      </header>
-
-      <main className="max-w-4xl mx-auto p-6 space-y-6">
+    <Layout title="余额明细" showBack={true} showTopBar={false}>
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
         {/* Stats Cards */}
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl border border-slate-100 p-5">
@@ -209,7 +196,7 @@ export default function CreditRecords() {
             </>
           )}
         </div>
-      </main>
-    </div>
+      </div>
+    </Layout>
   )
 }
