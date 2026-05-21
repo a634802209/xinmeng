@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Check, Shield } from 'lucide-react'
 import Layout from '@/components/Layout'
+import { useAuthStore } from '@/store/authStore'
 
 const PRESET_AMOUNTS = [10, 20, 50, 100, 200]
 
@@ -41,10 +42,13 @@ const PAYMENT_METHODS = [
 ]
 
 export default function Recharge() {
+  const { user } = useAuthStore()
   const [selectedAmount, setSelectedAmount] = useState(50)
   const [customAmount, setCustomAmount] = useState('')
   const [isCustom, setIsCustom] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('wechat')
+
+  const balance = user?.credits || 0
 
   const handleAmountClick = (amount: number) => {
     setSelectedAmount(amount)
@@ -75,7 +79,9 @@ export default function Recharge() {
       rightContent={
         <div className="flex items-center gap-4">
           <span className="text-sm text-slate-500">当前余额</span>
-          <span className="text-lg font-semibold text-slate-900">12,860</span>
+          <span className="text-lg font-semibold text-slate-900">
+            ¥{(balance / 100).toFixed(2)}
+          </span>
         </div>
       }
     >
