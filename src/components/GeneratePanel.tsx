@@ -1,14 +1,18 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Image, Video, Upload, Sparkles, X, AtSign, Search } from 'lucide-react'
-import { generateApi, authApi } from '@/lib/api'
+import { generateApi, authApi, configApi } from '@/lib/api'
 import { useGenerateStore } from '@/store/generateStore'
 import { useAuthStore } from '@/store/authStore'
 
-const RATIOS = ['16:9', '9:16', '1:1', '4:3']
-const QUALITIES = ['480p', '720p', '1080p', '2K', '4K']
-const COUNTS = [1, 2, 4, 8]
-const IMAGE_MODELS = ['SDXL 1.0', 'Midjourney V6', 'DALL-E 3', 'Stable Diffusion 3', 'Flux.1']
-const VIDEO_MODELS = ['Sora', 'Runway Gen-3', 'Pika 1.5', 'Stable Video', 'Kling']
+interface GenerateConfig {
+  imageModels: { name: string; id: string; type: string }[]
+  videoModels: { name: string; id: string; type: string }[]
+  ratios: string[]
+  qualities: string[]
+  counts: number[]
+  sizes: Record<string, string>
+}
+
 const MAX_IMAGES = 10
 const MAX_FILE_SIZE = 15 * 1024 * 1024
 
@@ -23,7 +27,37 @@ export default function GeneratePanel() {
   const [generating, setGenerating] = useState(false)
   const [uploadedImages, setUploadedImages] = useState<Array<{ id: string; url: string; file: File }>>([])
   const [isDragging, setIsDragging] = useState(false)
+  const [config, setConfig] = useState<GenerateConfig>({
+    imageModels: [],
+    videoModels: [],
+    ratios: ['16:9', '9:16', '1:1', '4:3'],
+    qualities: ['480p', '720p', '1080p', '2K', '4K'],
+    counts: [1, 2, 4, 8],
+    sizes: {},
+  })
+  const [configLoading, setConfigLoading] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // 从后端获取配置
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const res = await configApi.generate()
+        if (res.success && res.data) {
+          setConfig(res.data)
+          // 设置默认值
+          if (res.data.ratios.length > 0) setRatio(res.data.ratios[0])
+          if (res.data.qualities.length > 0) setQuality(res.data.qualities[2] || res.data.qualities[0])
+          if (res.data.counts.length > 0) setCount(res.data.counts[1] || res.data.counts[0])
+        }
+      } catch (err) {
+        console.error('加载配置失败:', err)
+      } finally {
+        setConfigLoading(false)
+      }
+    }
+    loadConfig()
+  }, [])
 
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files) return
@@ -55,18 +89,20 @@ export default function GeneratePanel() {
     handleFiles(e.dataTransfer.files)
   }
 
-  const currentModels = activeTab === 'image' ? IMAGE_MODELS : VIDEO_MODELS
+  const currentModels = activeTab === 'image' ? config.imageModels : config.videoModels
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return
     setGenerating(true)
     try {
-      const res = await generateApi.image({
+      const api = activeTab === 'image' ? generateApi.image : generateApi.video
+      const res = await api({
         prompt,
-        model: model || currentModels[0],
+        model: model || (currentModels[0]?.id),
         aspectRatio: ratio,
         quality,
         count,
+        referenceImages: uploadedImages.map(img => img.url),
       })
       if (res.success) {
         const task = {
@@ -75,6 +111,7 @@ export default function GeneratePanel() {
           progress: 0,
           result: null,
           prompt,
+          type: activeTab,
         }
         addTask(task)
         setCurrentTask(task)
@@ -95,6 +132,17 @@ export default function GeneratePanel() {
   }
 
   const uploadAreaSize = uploadedImages.length === 0 ? 'min-h-[180px]' : uploadedImages.length <= 3 ? 'min-h-[120px]' : 'min-h-[80px]'
+
+  if (configLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-white rounded-2xl border border-slate-100 p-6 text-center">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-slate-400 mt-2">加载配置中...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -225,7 +273,7 @@ export default function GeneratePanel() {
               </div>
             </div>
 
-            {/* 模型选择 */}
+            {/* 模型选择 - 动态从后端获取 */}
             <div>
               <label className="text-sm font-medium text-slate-700 mb-2 block">选择模型</label>
               <select
@@ -235,18 +283,18 @@ export default function GeneratePanel() {
               >
                 <option value="">默认模型</option>
                 {currentModels.map((m) => (
-                  <option key={m} value={m}>{m}</option>
+                  <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
             </div>
           </div>
         </div>
 
-        {/* 参数配置 */}
+        {/* 参数配置 - 动态从后端获取 */}
         <div className="mt-6 space-y-4">
           {/* 第一行：尺寸 + 清晰度 */}
           <div className="grid grid-cols-2 gap-4">
-            {/* 尺寸 */}
+            {/* 尺寸 - 动态 */}
             <div>
               <label className="text-sm text-slate-500 mb-2 block">尺寸比例</label>
               <select
@@ -254,13 +302,13 @@ export default function GeneratePanel() {
                 onChange={(e) => setRatio(e.target.value)}
                 className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none cursor-pointer"
               >
-                {RATIOS.map((r) => (
+                {config.ratios.map((r) => (
                   <option key={r} value={r}>{r}</option>
                 ))}
               </select>
             </div>
 
-            {/* 清晰度 */}
+            {/* 清晰度 - 动态 */}
             <div>
               <label className="text-sm text-slate-500 mb-2 block">清晰度</label>
               <select
@@ -268,18 +316,18 @@ export default function GeneratePanel() {
                 onChange={(e) => setQuality(e.target.value)}
                 className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none cursor-pointer"
               >
-                {QUALITIES.map((q) => (
+                {config.qualities.map((q) => (
                   <option key={q} value={q}>{q}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* 第二行：生成数量 */}
+          {/* 第二行：生成数量 - 动态 */}
           <div>
             <label className="text-sm text-slate-500 mb-2 block">生成数量</label>
             <div className="flex gap-2">
-              {COUNTS.map((c) => (
+              {config.counts.map((c) => (
                 <button
                   key={c}
                   onClick={() => setCount(c)}
