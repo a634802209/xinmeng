@@ -12,14 +12,14 @@ router.get('/generate', (_req, res: Response): void => {
     return row?.value || defaultValue
   }
 
-  // 图片模型配置
+  // 图片模型配置 - 格式: 显示名|id|类型|价格(分)
   const imageModels = getSetting('image_models',
-    'GPT-4o|gpt4o|image;Claude 3.5|claude35|image;DALL-E 3|dalle3|image;Stable Diffusion XL|sdxl|image;Midjourney V6|midjourney|image;Flux.1|flux|image'
+    'GPT-4o|gpt4o|image|1000;Claude 3.5|claude35|image|800;DALL-E 3|dalle3|image|1200;Stable Diffusion XL|sdxl|image|500;Midjourney V6|midjourney|image|1500;Flux.1|flux|image|600'
   )
 
-  // 视频模型配置
+  // 视频模型配置 - 格式: 显示名|id|类型|价格(分)
   const videoModels = getSetting('video_models',
-    'Sora|sora|video;Runway Gen-3|runway|video;Pika 1.5|pika|video;Stable Video|svd|video;Kling|kling|video'
+    'Sora|sora|video|5000;Runway Gen-3|runway|video|3000;Pika 1.5|pika|video|2500;Stable Video|svd|video|2000;Kling|kling|video|3500'
   )
 
   // 尺寸比例配置
@@ -31,11 +31,16 @@ router.get('/generate', (_req, res: Response): void => {
   // 生成数量配置
   const counts = getSetting('counts', '1,2,4,8')
 
-  // 解析模型配置字符串 "显示名|id|类型"
+  // 解析模型配置字符串 "显示名|id|类型|价格(分)"
   const parseModels = (config: string) => {
     return config.split(';').map(m => {
-      const [name, id, type] = m.split('|')
-      return { name: name.trim(), id: id.trim(), type: type.trim() }
+      const [name, id, type, price] = m.split('|')
+      return {
+        name: name.trim(),
+        id: id.trim(),
+        type: type.trim(),
+        price: price ? parseInt(price.trim()) : 0
+      }
     }).filter(m => m.name && m.id)
   }
 

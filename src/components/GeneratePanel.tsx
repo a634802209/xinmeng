@@ -4,9 +4,16 @@ import { generateApi, authApi, configApi } from '@/lib/api'
 import { useGenerateStore } from '@/store/generateStore'
 import { useAuthStore } from '@/store/authStore'
 
+interface ModelConfig {
+  name: string
+  id: string
+  type: string
+  price: number
+}
+
 interface GenerateConfig {
-  imageModels: { name: string; id: string; type: string }[]
-  videoModels: { name: string; id: string; type: string }[]
+  imageModels: ModelConfig[]
+  videoModels: ModelConfig[]
   ratios: string[]
   qualities: string[]
   counts: number[]
@@ -90,6 +97,11 @@ export default function GeneratePanel() {
   }
 
   const currentModels = activeTab === 'image' ? config.imageModels : config.videoModels
+
+  // 计算当前选择的价格
+  const selectedModel = currentModels.find(m => m.id === model)
+  const basePrice = selectedModel?.price || currentModels[0]?.price || 0
+  const totalPrice = basePrice * count
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return
@@ -273,7 +285,7 @@ export default function GeneratePanel() {
               </div>
             </div>
 
-            {/* 模型选择 - 动态从后端获取 */}
+            {/* 模型选择 - 动态从后端获取，带价格 */}
             <div>
               <label className="text-sm font-medium text-slate-700 mb-2 block">选择模型</label>
               <select
@@ -283,7 +295,9 @@ export default function GeneratePanel() {
               >
                 <option value="">默认模型</option>
                 {currentModels.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
+                  <option key={m.id} value={m.id}>
+                    {m.name} - ¥{(m.price / 100).toFixed(2)}/张
+                  </option>
                 ))}
               </select>
             </div>
@@ -344,7 +358,7 @@ export default function GeneratePanel() {
           </div>
         </div>
 
-        {/* 生成按钮 */}
+        {/* 生成按钮 - 价格动态显示 */}
         <div className="mt-6 flex items-center gap-4">
           <button
             onClick={handleGenerate}
@@ -353,7 +367,10 @@ export default function GeneratePanel() {
           >
             {generating ? '生成中...' : '立即生成'}
             <Sparkles className="w-4 h-4" />
-            <span className="bg-white/20 px-2 py-0.5 rounded text-xs">{count}</span>
+            <span className="bg-white/20 px-2 py-0.5 rounded text-xs">{count}张</span>
+            <span className="bg-white/20 px-2 py-0.5 rounded text-xs">
+              ¥{(totalPrice / 100).toFixed(2)}
+            </span>
           </button>
         </div>
       </div>
