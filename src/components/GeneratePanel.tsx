@@ -7,6 +7,8 @@ import { useAuthStore } from '@/store/authStore'
 const RATIOS = ['16:9', '9:16', '1:1', '4:3']
 const QUALITIES = ['480p', '720p', '1080p', '2K', '4K']
 const COUNTS = [1, 2, 4, 8]
+const IMAGE_MODELS = ['SDXL 1.0', 'Midjourney V6', 'DALL-E 3', 'Stable Diffusion 3', 'Flux.1']
+const VIDEO_MODELS = ['Sora', 'Runway Gen-3', 'Pika 1.5', 'Stable Video', 'Kling']
 const MAX_IMAGES = 10
 const MAX_FILE_SIZE = 15 * 1024 * 1024
 
@@ -14,7 +16,7 @@ export default function GeneratePanel() {
   const { activeTab, setActiveTab, addTask, setCurrentTask } = useGenerateStore()
   const { updateUser } = useAuthStore()
   const [prompt, setPrompt] = useState('')
-  const [negativePrompt, setNegativePrompt] = useState('')
+  const [model, setModel] = useState('')
   const [ratio, setRatio] = useState('16:9')
   const [quality, setQuality] = useState('1080p')
   const [count, setCount] = useState(2)
@@ -53,13 +55,15 @@ export default function GeneratePanel() {
     handleFiles(e.dataTransfer.files)
   }
 
+  const currentModels = activeTab === 'image' ? IMAGE_MODELS : VIDEO_MODELS
+
   const handleGenerate = async () => {
     if (!prompt.trim()) return
     setGenerating(true)
     try {
       const res = await generateApi.image({
         prompt,
-        negativePrompt,
+        model: model || currentModels[0],
         aspectRatio: ratio,
         quality,
         count,
@@ -195,7 +199,7 @@ export default function GeneratePanel() {
             </div>
           </div>
 
-          {/* 提示词 */}
+          {/* 提示词和模型选择 */}
           <div className="space-y-4">
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -221,20 +225,19 @@ export default function GeneratePanel() {
               </div>
             </div>
 
+            {/* 模型选择 */}
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-medium text-slate-700">负面提示词</span>
-                <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-500 text-[10px] flex items-center justify-center cursor-help">?</span>
-              </div>
-              <textarea
-                value={negativePrompt}
-                onChange={(e) => setNegativePrompt(e.target.value)}
-                placeholder="描述你不希望出现的内容..."
-                className="w-full h-16 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none transition-all"
-              />
-              <div className="text-right mt-1">
-                <span className="text-xs text-slate-400">{negativePrompt.length} / 1000</span>
-              </div>
+              <label className="text-sm font-medium text-slate-700 mb-2 block">选择模型</label>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none cursor-pointer"
+              >
+                <option value="">默认模型</option>
+                {currentModels.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>

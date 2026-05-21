@@ -242,8 +242,8 @@ export default function ResultPanel() {
 
   return (
     <div className="flex flex-col h-full gap-4">
-      {/* Top: Generate Result - stretches down, flex-1 to fill space */}
-      <div className="bg-white rounded-2xl border border-slate-100 p-4 flex-1 min-h-0 overflow-y-auto">
+      {/* Top: Generate Result - stretches down but leaves some space */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 flex-shrink-0">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-medium text-slate-800 text-sm">生成结果</h3>
           <div className="flex items-center gap-1">
