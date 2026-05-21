@@ -17,17 +17,37 @@ const DEMO_IMAGES = [
 
 router.post('/image', authMiddleware, (req: AuthRequest, res: Response): void => {
   const userId = req.user!.id
-  const { prompt, negativePrompt, style, aspectRatio, quality, count, seed, isPublic } = req.body
+  const { prompt, negativePrompt, aspectRatio, quality, count, isPublic } = req.body
 
   if (!prompt) {
     res.status(400).json({ success: false, error: 'Prompt is required' })
     return
   }
 
+  // 计算消耗积分
+  const imagePrice = parseInt((db.prepare("SELECT value FROM settings WHERE key = 'image_price'").get() as { value: string } | undefined)?.value || '10')
+  const cost = imagePrice * (count || 1)
+
+  // 检查余额
+  const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId) as { credits: number } | undefined
+  if (!user || user.credits < cost) {
+    res.status(400).json({ success: false, error: '余额不足，请充值' })
+    return
+  }
+
+  // 扣除积分
+  const newBalance = user.credits - cost
+  db.prepare('UPDATE users SET credits = ? WHERE id = ?').run(newBalance, userId)
+
+  // 记录消费明细
+  db.prepare(
+    'INSERT INTO credit_records (user_id, type, amount, balance, description) VALUES (?, ?, ?, ?, ?)'
+  ).run(userId, 'consume', -cost, newBalance, `图片生成 x${count || 1} - ${prompt.slice(0, 30)}`)
+
   const taskId = uuidv4()
   db.prepare(
-    'INSERT INTO generate_tasks (id, user_id, type, prompt, negative_prompt, style, aspect_ratio, quality, count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(taskId, userId, 'image', prompt, negativePrompt || '', style || '赛博朋克', aspectRatio || '16:9', quality || '标准', count || 1)
+    'INSERT INTO generate_tasks (id, user_id, type, prompt, negative_prompt, aspect_ratio, quality, count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(taskId, userId, 'image', prompt, negativePrompt || '', aspectRatio || '16:9', quality || '标准', count || 1)
 
   db.prepare('INSERT INTO works (user_id, type, prompt, status) VALUES (?, ?, ?, ?)').run(
     userId, 'image', prompt, 'processing'
@@ -41,6 +61,8 @@ router.post('/image', authMiddleware, (req: AuthRequest, res: Response): void =>
     success: true,
     taskId,
     estimatedTime,
+    deductedCredits: cost,
+    remainingCredits: newBalance,
   })
 })
 
@@ -52,6 +74,26 @@ router.post('/video', authMiddleware, (req: AuthRequest, res: Response): void =>
     res.status(400).json({ success: false, error: 'Prompt is required' })
     return
   }
+
+  // 计算消耗积分
+  const videoPrice = parseInt((db.prepare("SELECT value FROM settings WHERE key = 'video_price'").get() as { value: string } | undefined)?.value || '30')
+  const cost = videoPrice
+
+  // 检查余额
+  const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId) as { credits: number } | undefined
+  if (!user || user.credits < cost) {
+    res.status(400).json({ success: false, error: '余额不足，请充值' })
+    return
+  }
+
+  // 扣除积分
+  const newBalance = user.credits - cost
+  db.prepare('UPDATE users SET credits = ? WHERE id = ?').run(newBalance, userId)
+
+  // 记录消费明细
+  db.prepare(
+    'INSERT INTO credit_records (user_id, type, amount, balance, description) VALUES (?, ?, ?, ?, ?)'
+  ).run(userId, 'consume', -cost, newBalance, `视频生成 - ${prompt.slice(0, 30)}`)
 
   const taskId = uuidv4()
   db.prepare(
@@ -68,6 +110,8 @@ router.post('/video', authMiddleware, (req: AuthRequest, res: Response): void =>
     success: true,
     taskId,
     estimatedTime: 60,
+    deductedCredits: cost,
+    remainingCredits: newBalance,
   })
 })
 

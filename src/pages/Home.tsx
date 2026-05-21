@@ -5,10 +5,14 @@ import StatsBar from '@/components/StatsBar'
 import GeneratePanel from '@/components/GeneratePanel'
 import ResultPanel from '@/components/ResultPanel'
 import RightToolbar from '@/components/RightToolbar'
+import { useUserSync } from '@/hooks/useUserSync'
 
 export default function Home() {
   const [leftCollapsed, setLeftCollapsed] = useState(false)
   const [rightCollapsed, setRightCollapsed] = useState(false)
+
+  // 每 30 秒同步一次用户信息（余额等）
+  useUserSync(30000)
 
   return (
     <div className="flex h-screen bg-slate-50/50">
@@ -36,15 +40,16 @@ export default function Home() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         <TopBar />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-hidden p-6">
           <StatsBar />
-          <div className="flex gap-6">
-            <div className="flex-1">
+          <div className="flex gap-4 h-[calc(100%-60px)] items-end">
+            {/* Middle Generate Panel - narrow, scrollable, aligned to bottom */}
+            <div className={`transition-all duration-300 overflow-y-auto ${rightCollapsed ? 'flex-1' : 'w-[20%] min-w-[280px]'}`}>
               <GeneratePanel />
             </div>
-            {/* Right Result Panel with collapse */}
-            <div className={`relative flex transition-all duration-300 ${rightCollapsed ? 'w-0 overflow-hidden' : 'w-[380px]'}`}>
-              <div className={`flex-1 ${rightCollapsed ? 'hidden' : 'block'}`}>
+            {/* Right Result Panel with collapse - maximized, flex layout, aligned bottom */}
+            <div className={`relative flex transition-all duration-300 h-full ${rightCollapsed ? 'w-0 overflow-hidden' : 'flex-1'}`}>
+              <div className={`flex-1 h-full flex flex-col ${rightCollapsed ? 'hidden' : 'block'}`}>
                 <ResultPanel />
               </div>
               {/* Right collapse button - at the waist */}

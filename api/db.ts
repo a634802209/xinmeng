@@ -107,6 +107,29 @@ export function initDB() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS credit_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      balance INTEGER NOT NULL,
+      description TEXT,
+      related_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS canvas_projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      nodes TEXT NOT NULL,
+      connections TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_works_user_id ON works(user_id);
     CREATE INDEX IF NOT EXISTS idx_works_created_at ON works(created_at);
     CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
@@ -116,11 +139,14 @@ export function initDB() {
     CREATE INDEX IF NOT EXISTS idx_generate_tasks_created_at ON generate_tasks(created_at);
     CREATE INDEX IF NOT EXISTS idx_users_is_admin ON users(is_admin);
     CREATE INDEX IF NOT EXISTS idx_users_is_banned ON users(is_banned);
+    CREATE INDEX IF NOT EXISTS idx_credit_records_user_id ON credit_records(user_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_records_created_at ON credit_records(created_at);
+    CREATE INDEX IF NOT EXISTS idx_canvas_projects_user_id ON canvas_projects(user_id);
 
     INSERT OR IGNORE INTO settings (key, value) VALUES
-      ('image_price', '10'),
-      ('video_price', '30'),
-      ('member_month_price', '29'),
+      ('image_price', '1000'),
+      ('video_price', '3000'),
+      ('member_month_price', '2900'),
       ('free_storage_mb', '100'),
       ('member_storage_mb', '1024'),
       ('site_name', 'XinMeng.ai');

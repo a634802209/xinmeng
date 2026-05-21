@@ -9,10 +9,10 @@ export interface GenerateTask {
 }
 
 interface GenerateState {
-  activeTab: 'image' | 'video'
+  activeTab: 'image' | 'video' | 'chat'
   tasks: GenerateTask[]
   currentTask: GenerateTask | null
-  setActiveTab: (tab: 'image' | 'video') => void
+  setActiveTab: (tab: 'image' | 'video' | 'chat') => void
   addTask: (task: GenerateTask) => void
   updateTask: (taskId: string, updates: Partial<GenerateTask>) => void
   setCurrentTask: (task: GenerateTask | null) => void

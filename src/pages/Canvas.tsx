@@ -2,12 +2,17 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Diamond, Wallet, Coins, Bell, Receipt,
-  MousePointer2, Hand, StickyNote, Image as ImageIcon, Type, ZoomIn, Settings,
+  Home, MousePointer2, Hand, StickyNote, Image as ImageIcon, Type, ZoomIn, Settings,
   Play, Trash2, Scissors,
-  Lock, Maximize2, Minus, Plus, HelpCircle, Wand2
+  Lock, Maximize2, Minus, Plus, HelpCircle, Wand2,
+  Save, FolderOpen
 } from 'lucide-react'
+import { useAuthStore } from '@/store/authStore'
+import { useUserSync } from '@/hooks/useUserSync'
+import { canvasApi } from '@/lib/api'
 
 const leftTools = [
+  { icon: Home, label: '主页', action: 'navigate-home' },
   { icon: MousePointer2, label: '选择', active: true },
   { icon: Hand, label: '拖拽' },
   { icon: StickyNote, label: '便签' },
@@ -218,6 +223,7 @@ function VideoNode({ node }: { node: CanvasNode }) {
 
 export default function Canvas() {
   const navigate = useNavigate()
+  const { user, token } = useAuthStore()
   const canvasRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
@@ -258,32 +264,26 @@ export default function Canvas() {
 
   // Connection drag state
   const [connectingFrom, setConnectingFrom] = useState<{ nodeId: string; portIndex: number } | null>(null)
-  const [dragLine, setDragLine] = useState<{ fromX: number; fromY: number; toX: number; toY: number } | null>(null)
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
-  // Port refs for precise positioning
-  const portRefs = useRef<Record<string, { inputs: HTMLDivElement[]; outputs: HTMLDivElement[] }>>({})
+  // Hovered connection for scissors
+  const [hoveredConn, setHoveredConn] = useState<string | null>(null)
+
+  // Sync user info
+  useUserSync(30000)
 
   const getPortCenter = (nodeId: string, side: 'left' | 'right', index: number) => {
     const node = nodes.find((n) => n.id === nodeId)
     if (!node) return { x: 0, y: 0 }
-    const refs = portRefs.current[nodeId]
-    if (!refs) {
-      // fallback to approximate position
-      const x = side === 'left' ? node.x : node.x + 288
-      const y = node.y + 100
-      return { x, y }
-    }
-    const el = side === 'left' ? refs.inputs[index] : refs.outputs[index]
-    if (!el) {
-      const x = side === 'left' ? node.x : node.x + 288
-      const y = node.y + 100
-      return { x, y }
-    }
-    const rect = el.getBoundingClientRect()
-    const canvasRect = canvasRef.current?.getBoundingClientRect()
-    if (!canvasRect) return { x: 0, y: 0 }
-    const x = (rect.left + rect.width / 2 - canvasRect.left - offset.x) / scale
-    const y = (rect.top + rect.height / 2 - canvasRect.top - offset.y) / scale
+
+    const nodeWidth = 288
+    const headerHeight = 40
+    const portSpacing = 24
+    const startY = headerHeight + 20
+
+    const x = side === 'left' ? node.x : node.x + nodeWidth
+    const y = node.y + startY + index * portSpacing
+
     return { x, y }
   }
 
@@ -300,34 +300,89 @@ export default function Canvas() {
     }
   }
 
+  const screenToWorld = (screenX: number, screenY: number) => {
+    return {
+      x: (screenX - offset.x) / scale,
+      y: (screenY - offset.y) / scale,
+    }
+  }
+
+  const worldToScreen = (worldX: number, worldY: number) => {
+    return {
+      x: worldX * scale + offset.x,
+      y: worldY * scale + offset.y,
+    }
+  }
+
+  // Find nearest input port within snap distance
+  const findNearestPort = (worldX: number, worldY: number) => {
+    const snapDistance = 50 / scale // 50 screen pixels
+    let nearest: { nodeId: string; portIndex: number; x: number; y: number } | null = null
+    let minDist = snapDistance
+
+    for (const node of nodes) {
+      if (connectingFrom && node.id === connectingFrom.nodeId) continue
+
+      const inCount = connections.filter((c) => c.to === node.id).length
+      const inputPorts = Math.max(inCount + 1, 1)
+
+      for (let i = 0; i < inputPorts; i++) {
+        const pos = getPortCenter(node.id, 'left', i)
+        const dist = Math.sqrt((worldX - pos.x) ** 2 + (worldY - pos.y) ** 2)
+        if (dist < minDist) {
+          minDist = dist
+          nearest = { nodeId: node.id, portIndex: i, x: pos.x, y: pos.y }
+        }
+      }
+    }
+
+    return nearest
+  }
+
   const handleMouseMove = (e: React.MouseEvent) => {
+    const worldPos = screenToWorld(e.clientX, e.clientY)
+
     if (isDraggingCanvas) {
       setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y })
     }
     if (draggingNode) {
-      const worldX = (e.clientX - offset.x) / scale
-      const worldY = (e.clientY - offset.y) / scale
       setNodes((prev) =>
         prev.map((n) =>
           n.id === draggingNode
-            ? { ...n, x: worldX - nodeDragOffset.x, y: worldY - nodeDragOffset.y }
+            ? { ...n, x: worldPos.x - nodeDragOffset.x, y: worldPos.y - nodeDragOffset.y }
             : n
         )
       )
     }
-    if (connectingFrom && dragLine) {
-      const worldX = (e.clientX - offset.x) / scale
-      const worldY = (e.clientY - offset.y) / scale
-      setDragLine((prev) => prev ? { ...prev, toX: worldX, toY: worldY } : null)
+    if (connectingFrom) {
+      const nearest = findNearestPort(worldPos.x, worldPos.y)
+      if (nearest) {
+        setMousePos({ x: nearest.x, y: nearest.y })
+      } else {
+        setMousePos(worldPos)
+      }
     }
   }
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent) => {
     setIsDraggingCanvas(false)
     setDraggingNode(null)
-    if (connectingFrom && dragLine) {
+
+    if (connectingFrom) {
+      const worldPos = screenToWorld(e.clientX, e.clientY)
+      const nearest = findNearestPort(worldPos.x, worldPos.y)
+
+      if (nearest && nearest.nodeId !== connectingFrom.nodeId) {
+        const newConn: Connection = {
+          id: `c${Date.now()}`,
+          from: connectingFrom.nodeId,
+          to: nearest.nodeId,
+        }
+        setConnections((prev) => [...prev, newConn])
+      }
+
       setConnectingFrom(null)
-      setDragLine(null)
+      setMousePos({ x: 0, y: 0 })
     }
   }
 
@@ -338,17 +393,17 @@ export default function Canvas() {
 
     const pos = getPortCenter(nodeId, side, portIndex)
     setConnectingFrom({ nodeId, portIndex })
-    setDragLine({ fromX: pos.x, fromY: pos.y, toX: pos.x, toY: pos.y })
+    setMousePos(pos)
   }
 
-  // Port mouse up - finish drag connection
+  // Port mouse up - finish drag connection (fallback)
   const handlePortMouseUp = (e: React.MouseEvent, nodeId: string, side: 'left' | 'right') => {
     e.stopPropagation()
-    if (!connectingFrom || !dragLine) return
+    if (!connectingFrom) return
     if (side !== 'left') return
     if (connectingFrom.nodeId === nodeId) {
       setConnectingFrom(null)
-      setDragLine(null)
+      setMousePos({ x: 0, y: 0 })
       return
     }
 
@@ -360,16 +415,15 @@ export default function Canvas() {
     setConnections((prev) => [...prev, newConn])
 
     setConnectingFrom(null)
-    setDragLine(null)
+    setMousePos({ x: 0, y: 0 })
   }
 
   const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation()
     const node = nodes.find((n) => n.id === nodeId)
     if (!node) return
-    const worldX = (e.clientX - offset.x) / scale
-    const worldY = (e.clientY - offset.y) / scale
-    setNodeDragOffset({ x: worldX - node.x, y: worldY - node.y })
+    const worldPos = screenToWorld(e.clientX, e.clientY)
+    setNodeDragOffset({ x: worldPos.x - node.x, y: worldPos.y - node.y })
     setDraggingNode(nodeId)
   }
 
@@ -379,14 +433,13 @@ export default function Canvas() {
   }
 
   const addNode = (type: 'text' | 'image' | 'video') => {
-    const worldX = (contextMenu.x - offset.x) / scale
-    const worldY = (contextMenu.y - offset.y) / scale
+    const worldPos = screenToWorld(contextMenu.x, contextMenu.y)
     const id = `node-${Date.now()}`
     const newNode: CanvasNode = {
       id,
       title: type === 'text' ? '文本生成' : type === 'image' ? '图片生成' : '视频生成',
-      x: worldX,
-      y: worldY,
+      x: worldPos.x,
+      y: worldPos.y,
       type,
       model: MODELS[0],
       size: SIZES[2],
@@ -400,7 +453,6 @@ export default function Canvas() {
   const deleteNode = (nodeId: string) => {
     setNodes((prev) => prev.filter((n) => n.id !== nodeId))
     setConnections((prev) => prev.filter((c) => c.from !== nodeId && c.to !== nodeId))
-    delete portRefs.current[nodeId]
   }
 
   const deleteConnection = (connId: string) => {
@@ -419,20 +471,56 @@ export default function Canvas() {
     return Math.max(0, idx)
   }
 
-  // Register port ref
-  const registerPort = (nodeId: string, side: 'left' | 'right', index: number, el: HTMLDivElement | null) => {
-    if (!el) return
-    if (!portRefs.current[nodeId]) {
-      portRefs.current[nodeId] = { inputs: [], outputs: [] }
+  // Check if point is near bezier curve
+  const pointNearBezier = (px: number, py: number, x1: number, y1: number, x2: number, y2: number, threshold: number = 8) => {
+    // Simple line segment approximation for hit testing
+    const steps = 20
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps
+      const mt = 1 - t
+      // Cubic bezier
+      const bx = mt * mt * mt * x1 + 3 * mt * mt * t * (x1 + 80) + 3 * mt * t * t * (x2 - 80) + t * t * t * x2
+      const by = mt * mt * mt * y1 + 3 * mt * mt * t * (y1) + 3 * mt * t * t * (y2) + t * t * t * y2
+      const dist = Math.sqrt((px - bx) ** 2 + (py - by) ** 2)
+      if (dist < threshold) return true
     }
-    if (side === 'left') {
-      portRefs.current[nodeId].inputs[index] = el
-    } else {
-      portRefs.current[nodeId].outputs[index] = el
+    return false
+  }
+
+  // Handle mouse move on SVG for connection hover
+  const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (connectingFrom) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const worldPos = screenToWorld(e.clientX, e.clientY)
+
+    let found = null
+    for (const conn of connections) {
+      const fromNode = nodes.find((n) => n.id === conn.from)
+      const toNode = nodes.find((n) => n.id === conn.to)
+      if (!fromNode || !toNode) continue
+
+      const fromIndex = getConnectionPortIndex(conn.id, conn.from, true)
+      const toIndex = getConnectionPortIndex(conn.id, conn.to, false)
+      const fromPos = getPortCenter(conn.from, 'right', fromIndex)
+      const toPos = getPortCenter(conn.to, 'left', toIndex)
+
+      if (pointNearBezier(worldPos.x, worldPos.y, fromPos.x, fromPos.y, toPos.x, toPos.y)) {
+        found = conn.id
+        break
+      }
+    }
+    setHoveredConn(found)
+  }
+
+  // Handle click on SVG to delete connection
+  const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (hoveredConn) {
+      deleteConnection(hoveredConn)
+      setHoveredConn(null)
     }
   }
 
-  // Render connections using precise port positions
+  // Render connections
   const renderConnections = () => {
     return connections.map((conn) => {
       const fromNode = nodes.find((n) => n.id === conn.from)
@@ -445,46 +533,62 @@ export default function Canvas() {
       const fromPos = getPortCenter(conn.from, 'right', fromIndex)
       const toPos = getPortCenter(conn.to, 'left', toIndex)
 
-      const midX = (fromPos.x + toPos.x) / 2
-      const midY = (fromPos.y + toPos.y) / 2
+      const isHovered = hoveredConn === conn.id
 
       return (
         <g key={conn.id}>
           <path
             d={`M ${fromPos.x} ${fromPos.y} C ${fromPos.x + 80} ${fromPos.y}, ${toPos.x - 80} ${toPos.y}, ${toPos.x} ${toPos.y}`}
             fill="none"
-            stroke="white"
-            strokeWidth="1.5"
-            opacity="0.6"
-            className="pointer-events-auto cursor-pointer hover:opacity-100"
-            onClick={() => deleteConnection(conn.id)}
+            stroke={isHovered ? '#ef4444' : 'white'}
+            strokeWidth={isHovered ? 3 : 1.5}
+            opacity={isHovered ? 1 : 0.6}
+            style={{ pointerEvents: 'none' }}
           />
-          <foreignObject x={midX - 8} y={midY - 8} width="16" height="16">
-            <div
-              onClick={(e) => { e.stopPropagation(); deleteConnection(conn.id) }}
-              className="w-4 h-4 rounded-full bg-[#1e2230] border border-white/30 flex items-center justify-center cursor-pointer opacity-0 hover:opacity-100 transition-opacity"
-              title="剪断连线"
-            >
-              <Scissors className="w-2 h-2 text-white" />
-            </div>
-          </foreignObject>
+          {isHovered && (
+            <g>
+              {/* Scissors icon at midpoint */}
+              <circle
+                cx={(fromPos.x + toPos.x) / 2}
+                cy={(fromPos.y + toPos.y) / 2}
+                r={12}
+                fill="#1e2230"
+                stroke="#ef4444"
+                strokeWidth={1.5}
+                style={{ pointerEvents: 'none' }}
+              />
+              <text
+                x={(fromPos.x + toPos.x) / 2}
+                y={(fromPos.y + toPos.y) / 2}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill="#ef4444"
+                fontSize={10}
+                style={{ pointerEvents: 'none' }}
+              >
+                ✂
+              </text>
+            </g>
+          )}
         </g>
       )
     })
   }
 
   const renderDragLine = () => {
-    if (!dragLine) return null
+    if (!connectingFrom) return null
+    const pos = getPortCenter(connectingFrom.nodeId, 'right', connectingFrom.portIndex)
     return (
       <g>
         <path
-          d={`M ${dragLine.fromX} ${dragLine.fromY} C ${dragLine.fromX + 80} ${dragLine.fromY}, ${dragLine.toX - 80} ${dragLine.toY}, ${dragLine.toX} ${dragLine.toY}`}
+          d={`M ${pos.x} ${pos.y} C ${pos.x + 80} ${pos.y}, ${mousePos.x - 80} ${mousePos.y}, ${mousePos.x} ${mousePos.y}`}
           fill="none"
           stroke="#60a5fa"
-          strokeWidth="2"
-          strokeDasharray="5,5"
-          opacity="0.8"
+          strokeWidth={2}
+          opacity={0.9}
         />
+        {/* Target indicator */}
+        <circle cx={mousePos.x} cy={mousePos.y} r={4} fill="#60a5fa" opacity={0.6} />
       </g>
     )
   }
@@ -502,7 +606,21 @@ export default function Canvas() {
     }
   }
 
-  // Force re-render when nodes move or scale changes to update line positions
+  // Save project
+  const handleSave = async () => {
+    try {
+      await canvasApi.create({
+        name: `画布项目 ${new Date().toLocaleString()}`,
+        nodes,
+        connections,
+      })
+      alert('保存成功')
+    } catch {
+      alert('保存失败')
+    }
+  }
+
+  // Force re-render when nodes move
   const [, forceUpdate] = useState(0)
   useEffect(() => {
     forceUpdate((n) => n + 1)
@@ -519,22 +637,37 @@ export default function Canvas() {
           <span className="font-bold text-white text-lg">XinMeng.ai</span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button onClick={handleSave} className="flex items-center gap-1.5 px-3 py-1.5 text-slate-300 hover:bg-white/5 rounded-lg transition-all">
+            <Save className="w-4 h-4 text-green-400" />
+            <span className="text-sm">保存</span>
+          </button>
           <button onClick={() => navigate('/membership')} className="flex items-center gap-1.5 px-3 py-1.5 text-slate-300 hover:bg-white/5 rounded-lg transition-all">
             <Diamond className="w-4 h-4 text-blue-400" />
             <span className="text-sm">会员</span>
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-slate-300 hover:bg-white/5 rounded-lg transition-all">
+          <button
+            onClick={() => navigate('/recharge')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-slate-300 hover:bg-white/5 rounded-lg transition-all"
+          >
             <Wallet className="w-4 h-4 text-purple-400" />
             <span className="text-sm">充值</span>
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-slate-300 hover:bg-white/5 rounded-lg transition-all">
+          <button
+            onClick={() => navigate('/credit-records')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-slate-300 hover:bg-white/5 rounded-lg transition-all"
+          >
             <Receipt className="w-4 h-4 text-amber-400" />
             <span className="text-sm">余额明细</span>
           </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-slate-300 hover:bg-white/5 rounded-lg transition-all">
+          <button
+            onClick={() => navigate('/credit-records')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-slate-300 hover:bg-white/5 rounded-lg transition-all"
+          >
             <Coins className="w-4 h-4 text-amber-400" />
-            <span className="text-sm">余额 12,860</span>
+            <span className="text-sm">
+              余额 ¥{user?.credits !== undefined ? (user.credits / 100).toFixed(2) : '---'}
+            </span>
           </button>
           <button className="relative p-2 text-slate-400 hover:bg-white/5 rounded-lg transition-all">
             <Bell className="w-5 h-5" />
@@ -553,9 +686,15 @@ export default function Canvas() {
           {leftTools.map((tool) => (
             <button
               key={tool.label}
-              onClick={() => setActiveTool(tool.label)}
+              onClick={() => {
+                if (tool.action === 'navigate-home') {
+                  navigate('/')
+                } else {
+                  setActiveTool(tool.label)
+                }
+              }}
               className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-11 ${
-                activeTool === tool.label
+                activeTool === tool.label && tool.action !== 'navigate-home'
                   ? 'text-blue-400 bg-blue-500/10'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
@@ -574,10 +713,16 @@ export default function Canvas() {
           </div>
         )}
 
-        {/* Port hover hint */}
-        {!connectingFrom && (
+        {/* Hover hint */}
+        {!connectingFrom && hoveredConn && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-2 rounded-lg text-sm">
+            点击左键剪断连线
+          </div>
+        )}
+
+        {!connectingFrom && !hoveredConn && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-500/10 border border-white/5 text-slate-400 px-4 py-1.5 rounded-lg text-xs">
-            提示：从节点右侧端口拖拽可连线
+            提示：从节点右侧端口拖拽可连线，鼠标放到线上点击左键可剪断
           </div>
         )}
 
@@ -614,7 +759,12 @@ export default function Canvas() {
             }}
           >
             {/* Connection Lines */}
-            <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+            <svg
+              className="absolute inset-0"
+              style={{ width: '100%', height: '100%', overflow: 'visible' }}
+              onMouseMove={handleSvgMouseMove}
+              onClick={handleSvgClick}
+            >
               {renderConnections()}
               {renderDragLine()}
             </svg>
@@ -637,26 +787,26 @@ export default function Canvas() {
                   onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
                 >
                   {/* Left ports (inputs) */}
-                  <div className="absolute left-0 top-0 bottom-0 w-4 -translate-x-1/2 flex flex-col justify-center gap-2 pointer-events-auto">
+                  <div className="absolute left-0 top-10 bottom-4 w-4 -translate-x-1/2 flex flex-col justify-start gap-6 pointer-events-auto">
                     {Array.from({ length: inputPorts }).map((_, i) => (
                       <div
                         key={`in-${i}`}
-                        ref={(el) => registerPort(node.id, 'left', i, el)}
                         onMouseUp={(e) => handlePortMouseUp(e, node.id, 'left')}
-                        className="w-3 h-3 rounded-full border-2 border-slate-600 bg-slate-700/50 transition-all hover:border-blue-400 hover:bg-blue-500/30 hover:scale-125"
+                        className="w-3.5 h-3.5 rounded-full border-2 border-slate-500 bg-[#1e2230] transition-all hover:border-blue-400 hover:bg-blue-500/30 hover:scale-125"
+                        style={{ marginTop: i === 0 ? '16px' : '0' }}
                         title="输入端口"
                       />
                     ))}
                   </div>
 
                   {/* Right ports (outputs) */}
-                  <div className="absolute right-0 top-0 bottom-0 w-4 translate-x-1/2 flex flex-col justify-center gap-2 pointer-events-auto">
+                  <div className="absolute right-0 top-10 bottom-4 w-4 translate-x-1/2 flex flex-col justify-start gap-6 pointer-events-auto">
                     {Array.from({ length: outputPorts }).map((_, i) => (
                       <div
                         key={`out-${i}`}
-                        ref={(el) => registerPort(node.id, 'right', i, el)}
                         onMouseDown={(e) => handlePortMouseDown(e, node.id, 'right', i)}
-                        className="w-3 h-3 rounded-full border-2 border-slate-600 bg-slate-700/50 transition-all hover:border-green-400 hover:bg-green-500/30 hover:scale-125 cursor-crosshair"
+                        className="w-3.5 h-3.5 rounded-full border-2 border-slate-500 bg-[#1e2230] transition-all hover:border-green-400 hover:bg-green-500/30 hover:scale-125 cursor-crosshair"
+                        style={{ marginTop: i === 0 ? '16px' : '0' }}
                         title="输出端口"
                       />
                     ))}

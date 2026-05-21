@@ -18,6 +18,7 @@ import {
 
 const mainNavItems = [
   { icon: Home, label: '首页', path: '/' },
+  { icon: MessageSquare, label: '文字聊天', path: '/chat' },
   { icon: Infinity, label: '无限画布', path: '/canvas' },
   { icon: Code, label: 'API接口', path: '/api-docs' },
   { icon: Box, label: '模型广场', path: '/models' },

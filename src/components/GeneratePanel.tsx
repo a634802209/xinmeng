@@ -1,37 +1,23 @@
-import { useState, useRef, useCallback } from 'react'
-import { Image, Video, Upload, Sparkles, RefreshCw, Eye, EyeOff, X, AtSign, Search } from 'lucide-react'
-import { generateApi } from '@/lib/api'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { Image, Video, Upload, Sparkles, X, AtSign, Search } from 'lucide-react'
+import { generateApi, authApi } from '@/lib/api'
 import { useGenerateStore } from '@/store/generateStore'
+import { useAuthStore } from '@/store/authStore'
 
-const EXAMPLE_PROMPTS = [
-  '日式动漫风格的女孩',
-  '夏日海边的日落',
-  '宇航员在外太空',
-  '幻想森林',
-]
-
-const STYLES = ['赛博朋克', '写实', '动漫', '油画', '水彩', '像素']
-const RATIOS = [
-  { label: '16:9', value: '16:9', size: '1920x1080' },
-  { label: '9:16', value: '9:16', size: '1080x1920' },
-  { label: '1:1', value: '1:1', size: '1024x1024' },
-  { label: '4:3', value: '4:3', size: '1440x1080' },
-]
+const RATIOS = ['16:9', '9:16', '1:1', '4:3']
 const QUALITIES = ['480p', '720p', '1080p', '2K', '4K']
 const COUNTS = [1, 2, 4, 8]
 const MAX_IMAGES = 10
-const MAX_FILE_SIZE = 15 * 1024 * 1024 // 15MB
+const MAX_FILE_SIZE = 15 * 1024 * 1024
 
 export default function GeneratePanel() {
   const { activeTab, setActiveTab, addTask, setCurrentTask } = useGenerateStore()
+  const { updateUser } = useAuthStore()
   const [prompt, setPrompt] = useState('')
   const [negativePrompt, setNegativePrompt] = useState('')
-  const [style, setStyle] = useState('赛博朋克')
   const [ratio, setRatio] = useState('16:9')
   const [quality, setQuality] = useState('1080p')
   const [count, setCount] = useState(2)
-  const [seed, setSeed] = useState('123456')
-  const [isPublic, setIsPublic] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [uploadedImages, setUploadedImages] = useState<Array<{ id: string; url: string; file: File }>>([])
   const [isDragging, setIsDragging] = useState(false)
@@ -74,12 +60,9 @@ export default function GeneratePanel() {
       const res = await generateApi.image({
         prompt,
         negativePrompt,
-        style,
         aspectRatio: ratio,
         quality,
         count,
-        seed: seed ? parseInt(seed) : undefined,
-        isPublic,
       })
       if (res.success) {
         const task = {
@@ -91,17 +74,16 @@ export default function GeneratePanel() {
         }
         addTask(task)
         setCurrentTask(task)
+        const userData = await authApi.me()
+        if (userData?.success && userData.user) {
+          updateUser(userData.user)
+        }
       }
     } catch (err: any) {
       alert(err.message || '生成失败')
     } finally {
       setGenerating(false)
     }
-  }
-
-  const randomPrompt = () => {
-    const random = EXAMPLE_PROMPTS[Math.floor(Math.random() * EXAMPLE_PROMPTS.length)]
-    setPrompt(random)
   }
 
   const insertAtImage = () => {
@@ -112,7 +94,7 @@ export default function GeneratePanel() {
 
   return (
     <div className="space-y-4">
-      {/* Search Box - moved from TopBar */}
+      {/* Search Box */}
       <div className="bg-white rounded-2xl border border-slate-100 p-4">
         <div className="relative max-w-xl">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -236,13 +218,6 @@ export default function GeneratePanel() {
               />
               <div className="flex items-center justify-between mt-1">
                 <span className="text-xs text-slate-400">{prompt.length} / 1000</span>
-                <button
-                  onClick={randomPrompt}
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 transition-all"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  随机灵感
-                </button>
               </div>
             </div>
 
@@ -264,46 +239,8 @@ export default function GeneratePanel() {
           </div>
         </div>
 
-        {/* 示例提示词 */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-slate-500">示例提示词</span>
-            <button onClick={randomPrompt} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 transition-all">
-              <RefreshCw className="w-3 h-3" />
-              换一换
-            </button>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {EXAMPLE_PROMPTS.map((p) => (
-              <button
-                key={p}
-                onClick={() => setPrompt(p)}
-                className="px-3 py-1.5 bg-slate-50 text-slate-600 text-xs rounded-lg hover:bg-blue-50 hover:text-blue-600 transition-all border border-slate-100"
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* 参数配置 */}
-        <div className="mt-6 grid grid-cols-4 gap-4">
-          {/* 风格 */}
-          <div>
-            <label className="text-sm text-slate-500 mb-2 block">风格选择</label>
-            <div className="relative">
-              <select
-                value={style}
-                onChange={(e) => setStyle(e.target.value)}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none cursor-pointer"
-              >
-                {STYLES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
+        <div className="mt-6 grid grid-cols-3 gap-4">
           {/* 尺寸 */}
           <div>
             <label className="text-sm text-slate-500 mb-2 block">尺寸比例</label>
@@ -313,7 +250,7 @@ export default function GeneratePanel() {
               className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none cursor-pointer"
             >
               {RATIOS.map((r) => (
-                <option key={r.value} value={r.value}>{r.label} ({r.size})</option>
+                <option key={r} value={r}>{r}</option>
               ))}
             </select>
           </div>
@@ -353,39 +290,8 @@ export default function GeneratePanel() {
           </div>
         </div>
 
-        {/* 种子 + 公开 */}
-        <div className="mt-4 flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-500">种子（可选）</span>
-            <input
-              type="text"
-              value={seed}
-              onChange={(e) => setSeed(e.target.value)}
-              className="w-24 p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-            />
-            <button className="p-1.5 text-slate-400 hover:text-slate-600 transition-all">
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <button
-            onClick={() => setIsPublic(!isPublic)}
-            className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-100 transition-all"
-          >
-            {isPublic ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-            {isPublic ? '公开' : '私密'}
-          </button>
-        </div>
-
         {/* 生成按钮 */}
         <div className="mt-6 flex items-center gap-4">
-          <button
-            onClick={randomPrompt}
-            className="flex items-center gap-2 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-200 transition-all"
-          >
-            <Sparkles className="w-4 h-4" />
-            随机灵感
-          </button>
           <button
             onClick={handleGenerate}
             disabled={generating || !prompt.trim()}
@@ -395,14 +301,6 @@ export default function GeneratePanel() {
             <Sparkles className="w-4 h-4" />
             <span className="bg-white/20 px-2 py-0.5 rounded text-xs">{count}</span>
           </button>
-        </div>
-
-        {/* 队列状态 */}
-        <div className="mt-4 flex items-center gap-6 text-sm text-slate-500">
-          <span>队列状态</span>
-          <span>排队中 <span className="text-blue-600 font-medium">2</span></span>
-          <span>预计等待 00:00:35</span>
-          <button className="text-blue-600 hover:underline">查看队列 →</button>
         </div>
       </div>
     </div>

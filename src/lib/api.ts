@@ -48,3 +48,23 @@ export const worksApi = {
   list: () => apiFetch('/api/works'),
   delete: (id: number) => apiFetch(`/api/works/${id}`, { method: 'DELETE' }),
 }
+
+export const creditApi = {
+  records: (page = 1) => apiFetch(`/api/credits/records?page=${page}`),
+  stats: () => apiFetch('/api/credits/stats'),
+}
+
+export const canvasApi = {
+  projects: () => apiFetch('/api/canvas/projects'),
+  project: (id: number) => apiFetch(`/api/canvas/projects/${id}`),
+  create: (data: { name: string; nodes: unknown[]; connections: unknown[] }) =>
+    apiFetch('/api/canvas/projects', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: number, data: { name?: string; nodes?: unknown[]; connections?: unknown[] }) =>
+    apiFetch(`/api/canvas/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: number) => apiFetch(`/api/canvas/projects/${id}`, { method: 'DELETE' }),
+}
+
+export const configApi = {
+  generate: () => apiFetch('/api/config/generate'),
+  pricing: () => apiFetch('/api/config/pricing'),
+}

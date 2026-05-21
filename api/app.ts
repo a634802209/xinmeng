@@ -10,6 +10,9 @@ import worksRoutes from './routes/works.js'
 import userRoutes from './routes/user.js'
 import adminRoutes from './routes/admin.js'
 import channelRoutes from './routes/channels.js'
+import creditRoutes from './routes/credits.js'
+import canvasRoutes from './routes/canvas.js'
+import configRoutes from './routes/config.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -29,6 +32,9 @@ app.use('/api/works', worksRoutes)
 app.use('/api/user', userRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/channels', channelRoutes)
+app.use('/api/credits', creditRoutes)
+app.use('/api/canvas', canvasRoutes)
+app.use('/api/config', configRoutes)
 
 app.use('/api/health', (_req, res) => {
   res.status(200).json({ success: true, message: 'ok' })

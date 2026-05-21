@@ -36,7 +36,10 @@ export default function TopBar() {
           <span className="text-sm font-medium">充值</span>
         </button>
 
-        <button className="flex items-center gap-1.5 px-3 py-1.5 text-slate-600 hover:bg-slate-50 rounded-lg transition-all">
+        <button
+          onClick={() => navigate('/credit-records')}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-slate-600 hover:bg-slate-50 rounded-lg transition-all"
+        >
           <Receipt className="w-4 h-4 text-amber-500" />
           <span className="text-sm font-medium">余额明细</span>
         </button>
@@ -44,7 +47,7 @@ export default function TopBar() {
         <button className="flex items-center gap-1.5 px-3 py-1.5 text-slate-600 hover:bg-slate-50 rounded-lg transition-all">
           <Coins className="w-4 h-4 text-amber-500" />
           <span className="text-sm font-medium">
-            余额 {user?.credits?.toLocaleString() || '12,860'}
+            余额 ¥{user?.credits !== undefined ? (user.credits / 100).toFixed(2) : '---'}
           </span>
         </button>
 
