@@ -22,7 +22,6 @@ const mainNavItems = [
   { icon: Scissors, label: '剪辑', path: '/edit' },
   { icon: Code, label: 'API接口', path: '/api-docs' },
   { icon: Box, label: '模型广场', path: '/models' },
-  { icon: Settings, label: '设置', path: '/settings' },
 ]
 
 const extraNavItems = [
@@ -130,6 +129,22 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
           {!collapsed && <span className="text-sm font-medium">模型价格</span>}
         </button>
       </nav>
+
+      {/* Bottom: Settings */}
+      <div className="p-2 border-t border-slate-100">
+        <button
+          onClick={() => navigate('/settings')}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+            location.pathname === '/settings'
+              ? 'bg-blue-50 text-blue-600'
+              : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+          }`}
+          title={collapsed ? '设置' : undefined}
+        >
+          <Settings className="w-5 h-5 flex-shrink-0" />
+          {!collapsed && <span className="text-sm font-medium">设置</span>}
+        </button>
+      </div>
     </aside>
   )
 }
