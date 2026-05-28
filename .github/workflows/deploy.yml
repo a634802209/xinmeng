@@ -1,4 +1,4 @@
-name: Deploy to Tencent Cloud
+name: Deploy to Tencent Cloud Production
 
 on:
   push:
@@ -25,18 +25,35 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Deploy to server
+      - name: Create deployment package
+        run: |
+          mkdir -p deploy-package
+          cp -r dist deploy-package/
+          cp -r api deploy-package/
+          cp package.json deploy-package/
+          cp package-lock.json deploy-package/
+          cp docker-compose.prod.yml deploy-package/
+          cp Dockerfile deploy-package/
+          cp nginx.conf deploy-package/
+          cp .env.example deploy-package/
+          cp deploy.sh deploy-package/
+          cp backup.sh deploy-package/
+          cp monitor.sh deploy-package/
+          cp loki-config.yml deploy-package/
+          cp promtail-config.yml deploy-package/
+          tar -czf xinmeng-ai-prod.tar.gz -C deploy-package .
+
+      - name: Deploy to production server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
-          source: 'dist,api,package.json,docker-compose.yml,Dockerfile,nginx.conf,.env.example,deploy.sh'
-          target: '/opt/xinmeng-ai'
-          rm: true
+          source: 'xinmeng-ai-prod.tar.gz'
+          target: '/tmp'
 
-      - name: Restart services
+      - name: Extract and restart services
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -44,15 +61,52 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
           script: |
-            cd /opt/xinmeng-ai
-            # 确保 .env 存在（首次部署时从模板创建）
+            set -e
+            DEPLOY_DIR="/opt/xinmeng-ai"
+            mkdir -p $DEPLOY_DIR
+            cd $DEPLOY_DIR
+
+            # Backup current deployment
+            if [ -d "$DEPLOY_DIR/dist" ]; then
+              BACKUP_DIR="/opt/backups/xinmeng-ai-$(date +%Y%m%d-%H%M%S)"
+              mkdir -p /opt/backups
+              cp -r $DEPLOY_DIR "$BACKUP_DIR"
+              echo "Backup created at $BACKUP_DIR"
+            fi
+
+            # Extract new deployment
+            tar -xzf /tmp/xinmeng-ai-prod.tar.gz -C $DEPLOY_DIR
+            rm -f /tmp/xinmeng-ai-prod.tar.gz
+
+            # Ensure .env exists
             if [ ! -f .env ]; then
               cp .env.example .env
               echo "JWT_SECRET=$(openssl rand -base64 32)" >> .env
+              echo "ADMIN_JWT_SECRET=$(openssl rand -base64 32)" >> .env
               echo "FRONTEND_URL=https://${{ secrets.SERVER_HOST }}" >> .env
+              echo "NODE_ENV=production" >> .env
+              echo "PORT=3001" >> .env
             fi
-            # 重建并启动
-            docker-compose down
-            docker-compose up --build -d
-            # 清理旧镜像
+
+            # Ensure data directories exist
+            mkdir -p data public/uploads logs ssl
+
+            # Restart services
+            docker-compose -f docker-compose.prod.yml down || true
+            docker-compose -f docker-compose.prod.yml up --build -d
+
+            # Health check
+            sleep 10
+            if curl -sf http://localhost:3001/api/health > /dev/null; then
+              echo "Deployment successful!"
+            else
+              echo "Health check failed!"
+              exit 1
+            fi
+
+            # Cleanup old images
             docker image prune -f
+            docker system prune -f --volumes
+
+            # Keep only last 5 backups
+            ls -t /opt/backups/xinmeng-ai-* 2>/dev/null | tail -n +6 | xargs -r rm -rf
