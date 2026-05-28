@@ -1,9 +1,9 @@
-FROM node:20-alpine
+FROM node:20-bookworm
 
 WORKDIR /app
 
 # 安装系统依赖（better-sqlite3需要python3、make、g++）
-RUN apk add --no-cache python3 make g++ libstdc++
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 # 安装依赖
 COPY package*.json ./
