@@ -1,34 +1,48 @@
-FROM node:20-bookworm
+# 使用 Debian 12 (bookworm) 作为基础镜像，GLIBC 2.36+
+FROM node:20-bookworm AS builder
 
 WORKDIR /app
 
-# 安装系统依赖（better-sqlite3需要python3、make、g++）
+# 安装编译依赖
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
-# 设置环境变量强制 better-sqlite3 从源码编译
+# 设置环境变量强制从源码编译 better-sqlite3
 ENV npm_config_build_from_source=true
 ENV npm_config_disturl=https://nodejs.org/dist
 ENV npm_config_target=20
 
-# 复制 package 文件
+# 先复制 package 文件并安装依赖（利用缓存层）
 COPY package*.json ./
+RUN npm install better-sqlite3 --build-from-source && npm install
 
-# 先单独安装 better-sqlite3 并强制从源码编译
-RUN npm install better-sqlite3 --build-from-source
-
-# 安装其他依赖（跳过 better-sqlite3，因为已经安装过了）
-RUN npm install
-
-# 复制源码
+# 复制源码并构建前端
 COPY . .
-
-# 构建前端
 RUN npm run build
 
-# 创建必要目录
-RUN mkdir -p /app/data /app/public/uploads
+# 生产环境镜像
+FROM node:20-bookworm AS production
 
+WORKDIR /app
+
+# 安装运行所需的系统库
+RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
+
+# 从构建阶段复制必要文件
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/api ./api
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/public ./public
+
+# 创建数据目录并设置权限
+RUN mkdir -p /app/data /app/public/uploads /app/logs && chmod 755 /app/data /app/public/uploads
+
+# 暴露端口
 EXPOSE 3001
 
-# 使用 tsx 运行 TypeScript（已安装在 devDependencies）
-CMD ["npx", "tsx", "api/server.ts"]
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:3001/api/health || exit 1
+
+# 启动命令
+CMD ["node", "--experimental-specifier-resolution=node", "--loader", "tsx", "api/server.ts"]

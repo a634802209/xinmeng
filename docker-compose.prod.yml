@@ -2,12 +2,13 @@ version: '3.8'
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
     container_name: xinmeng-ai
-    # Node.js only listens on localhost inside container
-    # Nginx reverse proxies to it - Node.js port is NOT exposed externally
-    expose:
-      - "3001"
+    ports:
+      - "3001:3001"
     volumes:
       - ./data:/app/data
       - ./public/uploads:/app/public/uploads
@@ -15,88 +16,13 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - JWT_SECRET=${JWT_SECRET}
-      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
-      - FRONTEND_URL=${FRONTEND_URL}
+      - JWT_SECRET=${JWT_SECRET:-changeme-jwt-secret}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET:-changeme-admin-secret}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3001}
       - DB_PATH=/app/data/app.db
-      - TENCENT_COS_SECRET_ID=${TENCENT_COS_SECRET_ID}
-      - TENCENT_COS_SECRET_KEY=${TENCENT_COS_SECRET_KEY}
-      - TENCENT_COS_BUCKET=${TENCENT_COS_BUCKET}
-      - TENCENT_COS_REGION=${TENCENT_COS_REGION}
-      - TENCENT_COS_DOMAIN=${TENCENT_COS_DOMAIN}
-    restart: always
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    restart: unless-stopped
     logging:
       driver: "json-file"
       options:
         max-size: "100m"
         max-file: "3"
-
-  # Nginx - the ONLY service that exposes ports to the internet
-  nginx:
-    image: nginx:alpine
-    container_name: xinmeng-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./dist:/usr/share/nginx/html:ro
-      - ./public/uploads:/usr/share/nginx/html/uploads:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - app
-    restart: always
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
-
-  # 可选: 日志收集 (仅本地访问)
-  loki:
-    image: grafana/loki:2.9.0
-    container_name: xinmeng-loki
-    expose:
-      - "3100"
-    volumes:
-      - ./loki-config.yml:/etc/loki/local-config.yaml
-      - loki-data:/loki
-    command: -config.file=/etc/loki/local-config.yaml
-    restart: always
-    profiles:
-      - monitoring
-
-  promtail:
-    image: grafana/promtail:2.9.0
-    container_name: xinmeng-promtail
-    volumes:
-      - ./promtail-config.yml:/etc/promtail/config.yml
-      - /var/log:/var/log:ro
-      - ./logs:/app/logs:ro
-    command: -config.file=/etc/promtail/config.yml
-    restart: always
-    profiles:
-      - monitoring
-
-  grafana:
-    image: grafana/grafana:10.0.0
-    container_name: xinmeng-grafana
-    expose:
-      - "3000"
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./grafana-dashboards:/etc/grafana/provisioning/dashboards
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-    restart: always
-    profiles:
-      - monitoring
-
-volumes:
-  loki-data:
-  grafana-data:

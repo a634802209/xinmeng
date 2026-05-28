@@ -7,140 +7,95 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# 检查参数
-if [ $# -lt 2 ]; then
-    echo -e "${RED}用法: $0 <域名> <邮箱> [GitHub用户名] [GitHub仓库名]${NC}"
-    echo "示例: $0 xinmeng.ai admin@xinmeng.ai myuser xinmeng-ai"
+PROJECT_NAME="xinmeng-ai"
+PROJECT_DIR="/opt/$PROJECT_NAME"
+REPO_URL="https://github.com/a634802209/xinmeng.git"
+
+echo -e "${GREEN}=== XinMeng AI 部署脚本 ===${NC}"
+
+# 检查 root 权限
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}请使用 root 权限运行此脚本${NC}"
     exit 1
 fi
 
-DOMAIN=$1
-EMAIL=$2
-GITHUB_USER=${3:-""}
-GITHUB_REPO=${4:-""}
-
-echo "=== XinMeng.ai 私密部署脚本 ==="
-echo "域名: $DOMAIN"
-echo "邮箱: $EMAIL"
-
-# 1. 系统更新
-echo -e "\n${YELLOW}[1/8] 系统更新...${NC}"
-apt-get update && apt-get upgrade -y
-
-# 2. 安装 Docker
-echo -e "\n${YELLOW}[2/8] 安装 Docker...${NC}"
+# 1. 安装 Docker（如果未安装）
 if ! command -v docker &> /dev/null; then
+    echo -e "${YELLOW}正在安装 Docker...${NC}"
     curl -fsSL https://get.docker.com | sh
-    systemctl enable docker
     systemctl start docker
-fi
-
-# 3. 安装 Nginx
-echo -e "\n${YELLOW}[3/8] 安装 Nginx...${NC}"
-apt-get install -y nginx certbot python3-certbot-nginx
-
-# 4. 配置防火墙
-echo -e "\n${YELLOW}[4/8] 配置防火墙...${NC}"
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow 22/tcp
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw --force enable
-
-# 5. 创建应用目录
-echo -e "\n${YELLOW}[5/8] 创建应用目录...${NC}"
-mkdir -p /opt/xinmeng-ai/{data,uploads,logs}
-
-# 6. 生成安全密钥
-echo -e "\n${YELLOW}[6/8] 生成安全密钥...${NC}"
-JWT_SECRET=$(openssl rand -base64 32)
-
-cat > /opt/xinmeng-ai/.env << EOF
-NODE_ENV=production
-PORT=3001
-JWT_SECRET=$JWT_SECRET
-FRONTEND_URL=https://$DOMAIN
-DB_PATH=/app/data/app.db
-EOF
-
-chmod 600 /opt/xinmeng-ai/.env
-echo -e "${GREEN}JWT_SECRET 已生成并保存到 /opt/xinmeng-ai/.env${NC}"
-
-# 7. 配置 Nginx
-echo -e "\n${YELLOW}[7/8] 配置 Nginx...${NC}"
-cat > /etc/nginx/sites-available/xinmeng-ai << 'EOF'
-server {
-    listen 80;
-    server_name _;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name _;
-
-    ssl_certificate /etc/letsencrypt/live/placeholder/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/placeholder/privkey.pem;
-
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
-    location / {
-        proxy_pass http://127.0.0.1:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        proxy_read_timeout 86400;
-    }
-
-    location /uploads/ {
-        alias /opt/xinmeng-ai/uploads/;
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-    }
-}
-EOF
-
-ln -sf /etc/nginx/sites-available/xinmeng-ai /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-
-# 8. 申请 SSL 证书
-echo -e "\n${YELLOW}[8/8] 申请 SSL 证书...${NC}"
-certbot --nginx -d $DOMAIN --email $EMAIL --agree-tos --non-interactive || true
-
-# 更新 Nginx 配置中的证书路径
-sed -i "s|/etc/letsencrypt/live/placeholder|/etc/letsencrypt/live/$DOMAIN|g" /etc/nginx/sites-available/xinmeng-ai
-nginx -t && systemctl reload nginx
-
-# 设置自动续期
-echo "0 3 * * * certbot renew --quiet" | crontab -
-
-echo -e "\n${GREEN}=== 部署完成 ===${NC}"
-echo -e "请手动执行以下步骤:"
-echo ""
-echo "1. 将项目代码上传到 /opt/xinmeng-ai/"
-if [ -n "$GITHUB_USER" ] && [ -n "$GITHUB_REPO" ]; then
-    echo "   git clone https://github.com/$GITHUB_USER/$GITHUB_REPO.git /opt/xinmeng-ai/"
+    systemctl enable docker
+    echo -e "${GREEN}Docker 安装完成${NC}"
 else
-    echo "   使用 scp 或 rsync 上传代码"
+    echo -e "${GREEN}Docker 已安装${NC}"
 fi
-echo ""
-echo "2. 启动服务:"
-echo "   cd /opt/xinmeng-ai"
-echo "   docker-compose up --build -d"
-echo ""
-echo "3. 访问: https://$DOMAIN"
-echo ""
-echo -e "${YELLOW}安全提醒:${NC}"
-echo "- .env 文件已设置为 600 权限"
-echo "- 防火墙只开放 22, 80, 443"
-echo "- Node.js 只监听 127.0.0.1:3001"
-echo "- JWT_SECRET 是随机生成的，请妥善保管"
+
+# 2. 安装 Docker Compose（如果未安装）
+if ! command -v docker-compose &> /dev/null; then
+    echo -e "${YELLOW}正在安装 Docker Compose...${NC}"
+    curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+    echo -e "${GREEN}Docker Compose 安装完成${NC}"
+else
+    echo -e "${GREEN}Docker Compose 已安装${NC}"
+fi
+
+# 3. 创建项目目录
+mkdir -p "$PROJECT_DIR"
+cd "$PROJECT_DIR"
+
+# 4. 拉取/更新代码
+if [ -d ".git" ]; then
+    echo -e "${YELLOW}正在更新代码...${NC}"
+    git pull origin main
+else
+    echo -e "${YELLOW}正在克隆代码...${NC}"
+    git clone "$REPO_URL" .
+fi
+
+# 5. 创建必要目录
+mkdir -p data public/uploads logs
+
+# 6. 创建环境变量文件（如果不存在）
+if [ ! -f ".env" ]; then
+    echo -e "${YELLOW}创建环境变量文件...${NC}"
+    cat > .env << 'EOF'
+JWT_SECRET=your-secure-jwt-secret-change-this
+ADMIN_JWT_SECRET=your-secure-admin-secret-change-this
+FRONTEND_URL=http://129.204.225.231:3001
+EOF
+    echo -e "${YELLOW}警告：请编辑 .env 文件修改默认密钥！${NC}"
+fi
+
+# 7. 停止并删除旧容器
+echo -e "${YELLOW}停止旧容器...${NC}"
+docker-compose -f docker-compose.prod.yml down 2>/dev/null || true
+
+# 8. 清理旧镜像（可选）
+read -p "是否清理旧镜像以节省空间？(y/N): " clean_images
+if [[ $clean_images =~ ^[Yy]$ ]]; then
+    docker image prune -af --filter "until=24h"
+fi
+
+# 9. 构建并启动
+echo -e "${YELLOW}开始构建并启动服务...${NC}"
+docker-compose -f docker-compose.prod.yml up --build -d
+
+# 10. 等待服务启动
+echo -e "${YELLOW}等待服务启动...${NC}"
+sleep 10
+
+# 11. 检查服务状态
+if docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+    echo -e "${GREEN}=== 部署成功！===${NC}"
+    echo -e "${GREEN}访问地址: http://$(curl -s ifconfig.me):3001${NC}"
+    echo ""
+    echo "常用命令："
+    echo "  查看日志: docker-compose -f docker-compose.prod.yml logs -f"
+    echo "  重启服务: docker-compose -f docker-compose.prod.yml restart"
+    echo "  停止服务: docker-compose -f docker-compose.prod.yml down"
+else
+    echo -e "${RED}=== 部署可能失败，请检查日志 ===${NC}"
+    docker-compose -f docker-compose.prod.yml logs --tail=50
+    exit 1
+fi
