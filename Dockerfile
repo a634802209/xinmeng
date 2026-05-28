@@ -2,6 +2,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# 安装系统依赖（better-sqlite3需要python3、make、g++）
+RUN apk add --no-cache python3 make g++ libstdc++
+
 # 安装依赖
 COPY package*.json ./
 RUN npm install
