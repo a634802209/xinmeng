@@ -1,7 +1,6 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import bcrypt from 'bcryptjs'
-import { body, validationResult } from 'express-validator'
 import { generateAdminToken, adminAuthMiddleware, requireSuperAdmin, type AdminAuthRequest } from '../middleware/adminAuth.js'
 import { trackLoginAttempt } from '../middleware/security.js'
 import db from '../db.js'
@@ -16,18 +15,36 @@ function getClientIp(req: AdminAuthRequest): string {
   return req.ip || req.socket.remoteAddress || 'unknown'
 }
 
+function validateRequired(value: any, field: string): string | null {
+  if (value === undefined || value === null || value === '') {
+    return `${field} is required`
+  }
+  return null
+}
+
+function validateLength(value: string, min: number, max: number, field: string): string | null {
+  if (value.length < min || value.length > max) {
+    return `${field} must be ${min}-${max} characters`
+  }
+  return null
+}
+
 // Admin login with username/password
-router.post('/login', [
-  body('username').trim().notEmpty().withMessage('Username is required'),
-  body('password').notEmpty().withMessage('Password is required'),
-], async (req: AdminAuthRequest, res: Response): Promise<void> => {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    res.status(400).json({ success: false, error: errors.array()[0].msg })
+router.post('/login', async (req: AdminAuthRequest, res: Response): Promise<void> => {
+  const { username, password } = req.body
+
+  const usernameError = validateRequired(username, 'Username')
+  if (usernameError) {
+    res.status(400).json({ success: false, error: usernameError })
     return
   }
 
-  const { username, password } = req.body
+  const passwordError = validateRequired(password, 'Password')
+  if (passwordError) {
+    res.status(400).json({ success: false, error: passwordError })
+    return
+  }
+
   const clientIp = getClientIp(req)
 
   const admin = db.prepare('SELECT * FROM admin_accounts WHERE username = ?').get(username) as
@@ -81,17 +98,26 @@ router.get('/me', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): v
 })
 
 // Change admin password
-router.post('/change-password', adminAuthMiddleware, [
-  body('currentPassword').notEmpty().withMessage('Current password is required'),
-  body('newPassword').isLength({ min: 8 }).withMessage('New password must be at least 8 characters'),
-], async (req: AdminAuthRequest, res: Response): Promise<void> => {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    res.status(400).json({ success: false, error: errors.array()[0].msg })
+router.post('/change-password', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
+  const { currentPassword, newPassword } = req.body
+
+  const currentError = validateRequired(currentPassword, 'Current password')
+  if (currentError) {
+    res.status(400).json({ success: false, error: currentError })
     return
   }
 
-  const { currentPassword, newPassword } = req.body
+  const newError = validateRequired(newPassword, 'New password')
+  if (newError) {
+    res.status(400).json({ success: false, error: newError })
+    return
+  }
+
+  if (newPassword.length < 8) {
+    res.status(400).json({ success: false, error: 'New password must be at least 8 characters' })
+    return
+  }
+
   const adminId = req.adminUser!.id
 
   const admin = db.prepare('SELECT password_hash FROM admin_accounts WHERE id = ?').get(adminId) as
@@ -132,18 +158,31 @@ router.get('/accounts', adminAuthMiddleware, requireSuperAdmin, (req: AdminAuthR
 })
 
 // Create admin account (superadmin only)
-router.post('/accounts', adminAuthMiddleware, requireSuperAdmin, [
-  body('username').trim().isLength({ min: 3, max: 50 }).withMessage('Username must be 3-50 characters'),
-  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-  body('role').optional().isIn(['admin', 'superadmin']).withMessage('Role must be admin or superadmin'),
-], async (req: AdminAuthRequest, res: Response): Promise<void> => {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    res.status(400).json({ success: false, error: errors.array()[0].msg })
+router.post('/accounts', adminAuthMiddleware, requireSuperAdmin, async (req: AdminAuthRequest, res: Response): Promise<void> => {
+  const { username, password, role = 'admin' } = req.body
+
+  const usernameError = validateRequired(username, 'Username') || validateLength(username, 3, 50, 'Username')
+  if (usernameError) {
+    res.status(400).json({ success: false, error: usernameError })
     return
   }
 
-  const { username, password, role = 'admin' } = req.body
+  const passwordError = validateRequired(password, 'Password')
+  if (passwordError) {
+    res.status(400).json({ success: false, error: passwordError })
+    return
+  }
+
+  if (password.length < 8) {
+    res.status(400).json({ success: false, error: 'Password must be at least 8 characters' })
+    return
+  }
+
+  if (role !== 'admin' && role !== 'superadmin') {
+    res.status(400).json({ success: false, error: 'Role must be admin or superadmin' })
+    return
+  }
+
   const passwordHash = await bcrypt.hash(password, 10)
 
   try {

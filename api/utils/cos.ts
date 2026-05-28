@@ -1,6 +1,12 @@
-import COS from 'cos-nodejs-sdk-v5'
 import path from 'path'
 import fs from 'fs'
+
+let COS: any = null
+try {
+  COS = require('cos-nodejs-sdk-v5')
+} catch {
+  // cos-nodejs-sdk-v5 not installed, COS features disabled
+}
 
 const secretId = process.env.TENCENT_COS_SECRET_ID
 const secretKey = process.env.TENCENT_COS_SECRET_KEY
@@ -8,10 +14,10 @@ const bucket = process.env.TENCENT_COS_BUCKET
 const region = process.env.TENCENT_COS_REGION
 const cosDomain = process.env.TENCENT_COS_DOMAIN
 
-let cosClient: COS | null = null
+let cosClient: any = null
 
-export function getCOSClient(): COS | null {
-  if (!secretId || !secretKey || !bucket || !region) {
+export function getCOSClient(): any | null {
+  if (!COS || !secretId || !secretKey || !bucket || !region) {
     return null
   }
   if (!cosClient) {
@@ -24,7 +30,7 @@ export function getCOSClient(): COS | null {
 }
 
 export function isCOSEnabled(): boolean {
-  return !!(secretId && secretKey && bucket && region)
+  return !!(COS && secretId && secretKey && bucket && region)
 }
 
 export async function uploadToCOS(
@@ -37,7 +43,7 @@ export async function uploadToCOS(
   }
 
   return new Promise((resolve, reject) => {
-    client!.putObject(
+    client.putObject(
       {
         Bucket: bucket!,
         Region: region!,
@@ -45,7 +51,7 @@ export async function uploadToCOS(
         Body: fs.createReadStream(localPath),
         ContentType: getContentType(key),
       },
-      (err, data) => {
+      (err: any, data: any) => {
         if (err) {
           reject(err)
           return
@@ -64,13 +70,13 @@ export async function deleteFromCOS(key: string): Promise<void> {
   if (!client) return
 
   return new Promise((resolve, reject) => {
-    client!.deleteObject(
+    client.deleteObject(
       {
         Bucket: bucket!,
         Region: region!,
         Key: key,
       },
-      (err) => {
+      (err: any) => {
         if (err) {
           reject(err)
           return
