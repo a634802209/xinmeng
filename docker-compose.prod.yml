@@ -5,6 +5,7 @@ services:
     build:
       context: .
       target: production
+    image: xinmeng-ai:latest
     container_name: xinmeng-ai
     ports:
       - "3001:3001"
@@ -12,13 +13,8 @@ services:
       - ./data:/app/data
       - ./public/uploads:/app/public/uploads
       - ./logs:/app/logs
-    environment:
-      - NODE_ENV=production
-      - PORT=3001
-      - JWT_SECRET=${JWT_SECRET:-xinmeng-jwt-secret}
-      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET:-xinmeng-admin-secret}
-      - FRONTEND_URL=${FRONTEND_URL:-http://129.204.225.231:3001}
-      - DB_PATH=/app/data/app.db
+    env_file:
+      - .env
     restart: unless-stopped
     logging:
       driver: json-file
