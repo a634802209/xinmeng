@@ -1,0 +1,16 @@
+[Unit]
+Description=XinMeng AI Application
+Requires=docker.service
+After=docker.service nginx.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/xinmeng-ai
+ExecStart=/usr/local/bin/docker-compose -f /opt/xinmeng-ai/docker-compose.prod.yml up -d
+ExecStop=/usr/local/bin/docker-compose -f /opt/xinmeng-ai/docker-compose.prod.yml down
+ExecReload=/usr/local/bin/docker-compose -f /opt/xinmeng-ai/docker-compose.prod.yml restart
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target
