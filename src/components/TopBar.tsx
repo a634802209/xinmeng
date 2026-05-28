@@ -1,10 +1,32 @@
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Diamond, Wallet, Coins, Bell, Receipt, Shield } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 
 export default function TopBar() {
   const navigate = useNavigate()
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    const loadNotifications = async () => {
+      if (!token) return
+      try {
+        const res = await fetch('/api/notifications?limit=1', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json()
+        if (data?.success) {
+          setUnreadCount(data.data.unreadCount || 0)
+        }
+      } catch (err) {
+        console.error('加载通知失败:', err)
+      }
+    }
+    loadNotifications()
+    const interval = setInterval(loadNotifications, 30000)
+    return () => clearInterval(interval)
+  }, [token])
 
   return (
     <header className="h-16 bg-white border-b border-slate-100 flex items-center justify-end px-6">
@@ -51,11 +73,16 @@ export default function TopBar() {
           </span>
         </button>
 
-        <button className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-all">
+        <button
+          onClick={() => navigate('/notifications')}
+          className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-all"
+        >
           <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center">
-            3
-          </span>
+          {unreadCount > 0 && (
+            <span className="absolute top-1 right-1 min-w-[16px] h-4 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center px-1">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </button>
 
         <button

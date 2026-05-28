@@ -1,134 +1,146 @@
 #!/bin/bash
 set -e
 
-# ========== 配置 ==========
-SERVER_IP="129.204.225.231"
-SERVER_USER="root"
-APP_DIR="/opt/xinmeng-ai"
-# ==========================
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-echo "=== XinMeng.ai 部署脚本 ==="
-echo "目标服务器: ${SERVER_IP}"
+# 检查参数
+if [ $# -lt 2 ]; then
+    echo -e "${RED}用法: $0 <域名> <邮箱> [GitHub用户名] [GitHub仓库名]${NC}"
+    echo "示例: $0 xinmeng.ai admin@xinmeng.ai myuser xinmeng-ai"
+    exit 1
+fi
 
-# 1. 本地构建前端
-echo ""
-echo "[1/5] 本地构建前端..."
-cd "$(dirname "$0")"
-npm run build
+DOMAIN=$1
+EMAIL=$2
+GITHUB_USER=${3:-""}
+GITHUB_REPO=${4:-""}
 
-# 2. 创建部署包
-echo ""
-echo "[2/5] 创建部署包..."
-rm -rf .deploy-tmp
-mkdir -p .deploy-tmp
+echo "=== XinMeng.ai 私密部署脚本 ==="
+echo "域名: $DOMAIN"
+echo "邮箱: $EMAIL"
 
-cp -r dist .deploy-tmp/
-cp -r api .deploy-tmp/
-cp package.json .deploy-tmp/
-cp package-lock.json .deploy-tmp/
-cp Dockerfile .deploy-tmp/
-cp docker-compose.yml .deploy-tmp/
-cp -r api/scripts .deploy-tmp/api/ 2>/dev/null || true
+# 1. 系统更新
+echo -e "\n${YELLOW}[1/8] 系统更新...${NC}"
+apt-get update && apt-get upgrade -y
 
-# 3. 上传到服务器
-echo ""
-echo "[3/5] 上传到服务器..."
-ssh ${SERVER_USER}@${SERVER_IP} "mkdir -p ${APP_DIR}"
-rsync -avz --delete .deploy-tmp/ ${SERVER_USER}@${SERVER_IP}:${APP_DIR}/
-
-# 4. 服务器端部署
-echo ""
-echo "[4/5] 服务器端构建并启动..."
-ssh ${SERVER_USER}@${SERVER_IP} << REMOTE
-  cd ${APP_DIR}
-
-  # 安装 Docker（如未安装）
-  if ! command -v docker &> /dev/null; then
-    echo "安装 Docker..."
+# 2. 安装 Docker
+echo -e "\n${YELLOW}[2/8] 安装 Docker...${NC}"
+if ! command -v docker &> /dev/null; then
     curl -fsSL https://get.docker.com | sh
     systemctl enable docker
     systemctl start docker
-  fi
+fi
 
-  # 安装 Docker Compose（如未安装）
-  if ! command -v docker-compose &> /dev/null; then
-    echo "安装 Docker Compose..."
-    curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m)" -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
-  fi
+# 3. 安装 Nginx
+echo -e "\n${YELLOW}[3/8] 安装 Nginx...${NC}"
+apt-get install -y nginx certbot python3-certbot-nginx
 
-  # 数据目录持久化
-  mkdir -p ${APP_DIR}/data
+# 4. 配置防火墙
+echo -e "\n${YELLOW}[4/8] 配置防火墙...${NC}"
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw --force enable
 
-  # 构建并启动
-  docker-compose down 2>/dev/null || true
-  docker-compose up --build -d
+# 5. 创建应用目录
+echo -e "\n${YELLOW}[5/8] 创建应用目录...${NC}"
+mkdir -p /opt/xinmeng-ai/{data,uploads,logs}
 
-  # 等待服务启动
-  sleep 5
+# 6. 生成安全密钥
+echo -e "\n${YELLOW}[6/8] 生成安全密钥...${NC}"
+JWT_SECRET=$(openssl rand -base64 32)
 
-  # 健康检查
-  if curl -sf http://localhost:3001/api/health > /dev/null; then
-    echo "✅ 服务启动成功"
-  else
-    echo "⚠️ 服务可能未启动，查看日志: docker-compose logs"
-  fi
+cat > /opt/xinmeng-ai/.env << EOF
+NODE_ENV=production
+PORT=3001
+JWT_SECRET=$JWT_SECRET
+FRONTEND_URL=https://$DOMAIN
+DB_PATH=/app/data/app.db
+EOF
 
-  # 初始化管理员（如需要）
-  echo "检查管理员账号..."
-  docker exec xinmeng-ai npx tsx api/scripts/init-admin.ts 2>/dev/null || echo "管理员初始化完成或已存在"
-REMOTE
+chmod 600 /opt/xinmeng-ai/.env
+echo -e "${GREEN}JWT_SECRET 已生成并保存到 /opt/xinmeng-ai/.env${NC}"
 
-# 5. 配置 Nginx（如服务器上已有 Nginx）
-echo ""
-echo "[5/5] 配置 Nginx..."
-ssh ${SERVER_USER}@${SERVER_IP} << 'REMOTE'
-  if command -v nginx &> /dev/null; then
-    cat > /etc/nginx/conf.d/xinmeng-ai.conf << 'EOF'
+# 7. 配置 Nginx
+echo -e "\n${YELLOW}[7/8] 配置 Nginx...${NC}"
+cat > /etc/nginx/sites-available/xinmeng-ai << 'EOF'
 server {
     listen 80;
-    server_name 129.204.225.231;
+    server_name _;
+    return 301 https://$host$request_uri;
+}
 
-    # 前端静态资源
+server {
+    listen 443 ssl http2;
+    server_name _;
+
+    ssl_certificate /etc/letsencrypt/live/placeholder/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/placeholder/privkey.pem;
+
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
     location / {
         proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 86400;
     }
 
-    # API 代理
-    location /api {
-        proxy_pass http://127.0.0.1:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    location /uploads/ {
+        alias /opt/xinmeng-ai/uploads/;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
     }
 }
 EOF
-    nginx -t && systemctl reload nginx
-    echo "✅ Nginx 配置已更新"
-  else
-    echo "ℹ️ 服务器未安装 Nginx，直接使用 3001 端口访问"
-  fi
-REMOTE
 
-# 清理
-rm -rf .deploy-tmp
+ln -sf /etc/nginx/sites-available/xinmeng-ai /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
 
+# 8. 申请 SSL 证书
+echo -e "\n${YELLOW}[8/8] 申请 SSL 证书...${NC}"
+certbot --nginx -d $DOMAIN --email $EMAIL --agree-tos --non-interactive || true
+
+# 更新 Nginx 配置中的证书路径
+sed -i "s|/etc/letsencrypt/live/placeholder|/etc/letsencrypt/live/$DOMAIN|g" /etc/nginx/sites-available/xinmeng-ai
+nginx -t && systemctl reload nginx
+
+# 设置自动续期
+echo "0 3 * * * certbot renew --quiet" | crontab -
+
+echo -e "\n${GREEN}=== 部署完成 ===${NC}"
+echo -e "请手动执行以下步骤:"
 echo ""
-echo "=== 部署完成 ==="
+echo "1. 将项目代码上传到 /opt/xinmeng-ai/"
+if [ -n "$GITHUB_USER" ] && [ -n "$GITHUB_REPO" ]; then
+    echo "   git clone https://github.com/$GITHUB_USER/$GITHUB_REPO.git /opt/xinmeng-ai/"
+else
+    echo "   使用 scp 或 rsync 上传代码"
+fi
 echo ""
-echo "🌐 访问地址:"
-echo "   前台: http://${SERVER_IP}"
-echo "   后台: http://${SERVER_IP}/admin"
+echo "2. 启动服务:"
+echo "   cd /opt/xinmeng-ai"
+echo "   docker-compose up --build -d"
 echo ""
-echo "📋 常用命令（在服务器上执行）:"
-echo "   cd ${APP_DIR}"
-echo "   docker-compose logs -f        # 查看日志"
-echo "   docker-compose restart          # 重启服务"
-echo "   docker-compose down && docker-compose up -d  # 完全重启"
+echo "3. 访问: https://$DOMAIN"
 echo ""
-echo "🔄 后续更新: 直接再次运行此脚本即可"
+echo -e "${YELLOW}安全提醒:${NC}"
+echo "- .env 文件已设置为 600 权限"
+echo "- 防火墙只开放 22, 80, 443"
+echo "- Node.js 只监听 127.0.0.1:3001"
+echo "- JWT_SECRET 是随机生成的，请妥善保管"

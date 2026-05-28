@@ -1,3 +1,28 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+dist
+dist-ssr
+*.local
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
 # Logs
 logs
 *.log
@@ -7,19 +32,16 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Database
+*.db
+*.db-journal
+data/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-.vite
+# Uploads
+uploads/
+public/uploads/
+
+# Misc
+*.pem
+*.key
+*.crt

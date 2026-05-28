@@ -12,9 +12,10 @@ COPY . .
 # 构建前端
 RUN npm run build
 
-# 数据持久化目录
-RUN mkdir -p /app/data
+# 创建必要目录
+RUN mkdir -p /app/data /app/public/uploads
 
 EXPOSE 3001
 
-CMD ["node", "api/server.ts"]
+# 使用 tsx 运行 TypeScript（已安装在 devDependencies）
+CMD ["npx", "tsx", "api/server.ts"]

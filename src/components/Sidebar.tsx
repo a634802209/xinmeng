@@ -13,13 +13,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Tag,
+  Wand2,
 } from 'lucide-react'
+import Logo from './Logo'
 
 const mainNavItems = [
   { icon: Home, label: '首页', path: '/' },
+  { icon: Wand2, label: '快捷创作', path: '/quick-create' },
   { icon: MessageSquare, label: '文字聊天', path: '/chat' },
   { icon: Infinity, label: '无限画布', path: '/canvas' },
-  { icon: Scissors, label: '剪辑', path: '/edit' },
   { icon: Code, label: 'API接口', path: '/api-docs' },
   { icon: Box, label: '模型广场', path: '/models' },
 ]
@@ -45,13 +47,8 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
       }`}
     >
       {/* Logo */}
-      <div className="h-16 flex items-center px-4 border-b border-slate-50">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-          <span className="text-white font-bold text-sm">X</span>
-        </div>
-        {!collapsed && (
-          <span className="ml-3 font-bold text-slate-800 text-lg">XinMeng.ai</span>
-        )}
+      <div className="px-4 mb-4 pl-10">
+        <img src="/LOGO.PNG.png" alt="XinMeng AI" className="h-20 w-auto" />
       </div>
 
       {/* Main Nav */}

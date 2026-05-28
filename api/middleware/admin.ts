@@ -2,6 +2,11 @@ import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import db from '../db.js'
 
+const JWT_SECRET = process.env.JWT_SECRET
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required')
+}
+
 export interface AdminRequest extends Request {
   admin?: {
     id: number
@@ -18,15 +23,18 @@ export function adminMiddleware(req: AdminRequest, res: Response, next: NextFunc
   }
 
   const token = authHeader.split(' ')[1]
-  const JWT_SECRET = process.env.JWT_SECRET || 'xinmeng-secret-key'
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; email: string }
-    const user = db.prepare('SELECT id, email, is_admin FROM users WHERE id = ?').get(decoded.userId) as
-      | { id: number; email: string; is_admin: number }
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string }
+    const user = db.prepare('SELECT id, email, is_admin, is_banned FROM users WHERE id = ?').get(decoded.id) as
+      | { id: number; email: string; is_admin: number; is_banned: number }
       | undefined
 
-    if (!user || !user.is_admin) {
+    if (!user || user.is_banned) {
+      res.status(403).json({ success: false, error: 'Account is banned' })
+      return
+    }
+    if (!user.is_admin) {
       res.status(403).json({ success: false, error: 'Forbidden: Admin access required' })
       return
     }
@@ -35,5 +43,6 @@ export function adminMiddleware(req: AdminRequest, res: Response, next: NextFunc
     next()
   } catch {
     res.status(401).json({ success: false, error: 'Invalid token' })
+    return
   }
 }

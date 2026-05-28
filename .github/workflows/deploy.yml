@@ -1,0 +1,58 @@
+name: Deploy to Tencent Cloud
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Deploy to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          source: 'dist,api,package.json,docker-compose.yml,Dockerfile,nginx.conf,.env.example,deploy.sh'
+          target: '/opt/xinmeng-ai'
+          rm: true
+
+      - name: Restart services
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          script: |
+            cd /opt/xinmeng-ai
+            # 确保 .env 存在（首次部署时从模板创建）
+            if [ ! -f .env ]; then
+              cp .env.example .env
+              echo "JWT_SECRET=$(openssl rand -base64 32)" >> .env
+              echo "FRONTEND_URL=https://${{ secrets.SERVER_HOST }}" >> .env
+            fi
+            # 重建并启动
+            docker-compose down
+            docker-compose up --build -d
+            # 清理旧镜像
+            docker image prune -f

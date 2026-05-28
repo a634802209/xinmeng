@@ -1,12 +1,18 @@
 import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import db from '../db.js'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'xinmeng-ai-secret-key-2026'
+const JWT_SECRET = process.env.JWT_SECRET
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required')
+}
 
 export interface AuthRequest extends Request {
   user?: {
     id: number
     email: string
+    nickname?: string
+    avatar?: string
     isAdmin?: boolean
   }
 }
@@ -21,13 +27,20 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   const token = authHeader.substring(7)
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string; isAdmin?: boolean }
+    // Check if user is banned
+    const user = db.prepare('SELECT is_banned FROM users WHERE id = ?').get(decoded.id) as { is_banned: number } | undefined
+    if (!user || user.is_banned) {
+      res.status(403).json({ success: false, error: 'Account is banned' })
+      return
+    }
     req.user = decoded
     next()
   } catch {
     res.status(401).json({ success: false, error: 'Invalid token' })
+    return
   }
 }
 
-export function generateToken(user: { id: number; email: string; isAdmin?: boolean }): string {
+export function generateToken(user: { id: number; email: string; nickname?: string; avatar?: string; isAdmin?: boolean }): string {
   return jwt.sign(user, JWT_SECRET, { expiresIn: '7d' })
 }

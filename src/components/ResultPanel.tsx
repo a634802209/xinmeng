@@ -110,13 +110,13 @@ export default function ResultPanel() {
       {item.type === 'video' ? (
         <video
           src={item.url}
-          className="w-full h-48 object-cover"
+          className="w-full h-auto object-contain"
           preload="metadata"
           controls
           poster={item.url.replace('.mp4', '.jpg')}
         />
       ) : (
-        <img src={item.url} alt={item.prompt} className="w-full h-48 object-cover" />
+        <img src={item.url} alt={item.prompt} className="w-full h-auto object-contain" />
       )}
       {/* Top-right: Download + Delete */}
       <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -280,8 +280,7 @@ export default function ResultPanel() {
     <div className="flex flex-col h-full gap-4">
       {/* Top: Generate Result Area */}
       <div className="bg-white rounded-2xl border border-slate-100 p-4 flex-1 min-h-0 overflow-y-auto">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium text-slate-800 text-sm">生成结果</h3>
+        <div className="flex items-center justify-end mb-3">
           <div className="flex items-center gap-1">
             {[
               { key: 'all', label: '全部' },

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import type { Response } from 'express'
 import db from '../db.js'
 import { adminMiddleware, type AdminRequest } from '../middleware/admin.js'
+import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -35,15 +36,14 @@ router.get('/', adminMiddleware, (req: AdminRequest, res: Response): void => {
   })
 })
 
-// 获取单个渠道详情（包含 api_key）
+// 获取单个渠道详情（隐藏 api_key）
 router.get('/:id', adminMiddleware, (req: AdminRequest, res: Response): void => {
-  const channel = db.prepare('SELECT * FROM api_channels WHERE id = ?').get(req.params.id) as
+  const channel = db.prepare('SELECT id, name, type, base_url, model, priority, is_active, weight, success_count, fail_count, last_used_at, created_at FROM api_channels WHERE id = ?').get(req.params.id) as
     | {
         id: number
         name: string
         type: string
         base_url: string
-        api_key: string
         model: string | null
         priority: number
         is_active: number
@@ -65,6 +65,7 @@ router.get('/:id', adminMiddleware, (req: AdminRequest, res: Response): void => 
     data: {
       ...channel,
       is_active: !!channel.is_active,
+      api_key: '***hidden***',
     },
   })
 })
@@ -159,6 +160,19 @@ router.post('/:id/test', adminMiddleware, async (req: AdminRequest, res: Respons
     return
   }
 
+  // SSRF protection: only allow http/https protocols
+  const url = new URL(channel.base_url)
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    res.status(400).json({ success: false, error: 'Invalid URL protocol' })
+    return
+  }
+  // Block private IP ranges
+  const hostname = url.hostname
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('10.') || hostname.startsWith('192.168.') || hostname.startsWith('172.')) {
+    res.status(400).json({ success: false, error: 'Private IP addresses are not allowed' })
+    return
+  }
+
   try {
     const response = await fetch(`${channel.base_url}/models`, {
       method: 'GET',
@@ -181,8 +195,8 @@ router.post('/:id/test', adminMiddleware, async (req: AdminRequest, res: Respons
   }
 })
 
-// 获取可用渠道（供生成接口内部调用）
-router.get('/available/:type', (req, res): void => {
+// 获取可用渠道（供生成接口内部调用）- 需要认证
+router.get('/available/:type', authMiddleware, (req: AuthRequest, res: Response): void => {
   const type = req.params.type
   const channels = db.prepare(
     'SELECT id, name, base_url, api_key, model, weight FROM api_channels WHERE type = ? AND is_active = 1 ORDER BY priority DESC'

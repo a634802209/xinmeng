@@ -4,9 +4,11 @@ import {
   Users, CreditCard, Image, Video, TrendingUp, DollarSign,
   LayoutDashboard, UserCog, ShoppingCart, Settings, LogOut,
   Ban, CheckCircle, Search, ChevronLeft, ChevronRight,
-  Trash2, Edit3, Save, X, Plus, Plug, Activity, Globe, KeyRound
+  Trash2, Edit3, Save, X, Plus, Plug, Activity, Globe, KeyRound,
+  Shield
 } from 'lucide-react'
-import { useAuthStore } from '@/store/authStore'
+import { useAdminAuthStore } from '@/store/adminAuthStore'
+import SecurityPanel from '@/components/SecurityPanel'
 
 interface Stats {
   totalUsers: number
@@ -72,7 +74,7 @@ const CHANNEL_API = '/api/channels'
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
-  const { user, token, logout } = useAuthStore()
+  const { adminToken, adminUser, isAdminLoggedIn, adminLogout } = useAdminAuthStore()
   const [activeTab, setActiveTab] = useState('dashboard')
   const [stats, setStats] = useState<Stats | null>(null)
   const [users, setUsers] = useState<UserItem[]>([])
@@ -101,6 +103,7 @@ export default function AdminDashboard() {
     { id: 'orders', label: '订单财务', icon: ShoppingCart },
     { id: 'works', label: '作品管理', icon: Image },
     { id: 'channels', label: 'API渠道', icon: Plug },
+    { id: 'security', label: '安全管理', icon: Shield },
     { id: 'settings', label: '平台配置', icon: Settings },
   ]
 
@@ -109,13 +112,13 @@ export default function AdminDashboard() {
       ...options,
       headers: {
         ...options.headers,
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${adminToken}`,
         'Content-Type': 'application/json',
       },
     })
     if (res.status === 401 || res.status === 403) {
-      logout()
-      navigate('/login')
+      adminLogout()
+      navigate('/admin-login')
       return null
     }
     return res.json()
@@ -174,13 +177,13 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
-    if (!user?.isAdmin) {
-      navigate('/')
+    if (!isAdminLoggedIn) {
+      navigate('/admin-login')
       return
     }
     loadStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
+  }, [isAdminLoggedIn])
 
   useEffect(() => {
     if (activeTab === 'users') loadUsers()
@@ -188,6 +191,7 @@ export default function AdminDashboard() {
     if (activeTab === 'works') loadWorks()
     if (activeTab === 'settings') loadSettings()
     if (activeTab === 'channels') loadChannels()
+    if (activeTab === 'dashboard') loadStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, page, searchQuery])
 
@@ -489,9 +493,9 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-4 gap-4">
         {works.map((w) => (
           <div key={w.id} className="bg-[#1a1d29] border border-white/5 rounded-xl overflow-hidden">
-            <div className="aspect-video bg-[#0f1117] flex items-center justify-center">
+            <div className="bg-[#0f1117] flex items-center justify-center">
               {w.result_url ? (
-                <img src={w.result_url} alt="" className="w-full h-full object-cover" />
+                <img src={w.result_url} alt="" className="w-full h-auto object-contain" />
               ) : (
                 <Image className="w-8 h-8 text-slate-600" />
               )}
@@ -751,7 +755,7 @@ export default function AdminDashboard() {
         </nav>
         <div className="p-3 border-t border-white/5">
           <button
-            onClick={() => { logout(); navigate('/login') }}
+            onClick={() => { adminLogout(); navigate('/admin-login') }}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all"
           >
             <LogOut className="w-4 h-4" />
@@ -767,8 +771,10 @@ export default function AdminDashboard() {
             {tabs.find((t) => t.id === activeTab)?.label}
           </h1>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-400">{user?.email}</span>
-            <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded">管理员</span>
+            <span className="text-sm text-slate-400">{adminUser?.username}</span>
+            <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded">
+              {adminUser?.role === 'superadmin' ? '超级管理员' : '管理员'}
+            </span>
           </div>
         </header>
         <div className="flex-1 overflow-y-auto p-6">
@@ -777,6 +783,7 @@ export default function AdminDashboard() {
           {activeTab === 'orders' && renderOrders()}
           {activeTab === 'works' && renderWorks()}
           {activeTab === 'channels' && renderChannels()}
+          {activeTab === 'security' && <SecurityPanel token={adminToken || ''} />}
           {activeTab === 'settings' && renderSettings()}
         </div>
       </main>

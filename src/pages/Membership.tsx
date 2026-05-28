@@ -1,228 +1,222 @@
-import { Crown, Check, X, Info, Calendar, Shield } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Crown, Check, X, Info, Calendar, Shield, Loader2 } from 'lucide-react'
 import Layout from '@/components/Layout'
+import { useAuthStore } from '@/store/authStore'
 
-const plans = [
-  {
-    name: '免费用户',
-    price: '0',
-    unit: '元',
-    period: '永久',
-    badge: '当前方案',
-    badgeColor: 'bg-slate-100 text-slate-500',
-    buttonText: '当前使用中',
-    buttonStyle: 'bg-slate-100 text-slate-500 cursor-default',
-    features: {
-      price: '0元永久',
-      generationPrice: '与会员完全相同',
-      watermark: '所有生成图片/视频带半透明平台水印（右下角浅水印，不影响预览但无法商用）',
-      storage: '500MB空间，作品仅保存7天，到期自动永久删除',
-      speed: '普通公共队列，预计等待2-5分钟',
-      concurrent: '同时只能生成1个任务',
-      resolution: '最高2048x2048',
-      permissions: ['文生图', '图生图', '5秒视频生成'],
-      extras: '-',
-    },
-  },
-  {
-    name: '基础会员',
-    price: '29',
-    unit: '元/月',
-    period: '按月订阅',
-    badge: '推荐',
-    badgeColor: 'bg-blue-500 text-white',
-    buttonText: '立即开通',
-    buttonStyle: 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:shadow-lg',
-    features: {
-      price: '29元/月，290元/年（买10送2）',
-      generationPrice: '与会员完全相同',
-      watermark: '完全无水印，支持高清原图下载',
-      storage: '2GB永久存储空间，作品永不删除，可手动删除释放空间',
-      speed: '会员优先队列，预计等待30秒-2分钟',
-      concurrent: '同时可生成3个任务',
-      resolution: '最高4096x4096',
-      permissions: ['全部免费功能', '10秒视频生成', '局部重绘', '2倍扩图'],
-      extras: '优先体验所有新功能、专属客服通道（24小时内回复）',
-    },
-  },
-  {
-    name: '基础会员（年付）',
-    price: '290',
-    unit: '元/年',
-    period: '',
-    badge: '最划算',
-    badgeColor: 'bg-amber-100 text-amber-600',
-    buttonText: '立即开通',
-    buttonStyle: 'bg-white border-2 border-blue-500 text-blue-600 hover:bg-blue-50',
-    features: {
-      price: '29元/月，290元/年（买10送2）',
-      generationPrice: '与会员完全相同',
-      watermark: '完全无水印，支持高清原图下载',
-      storage: '2GB永久存储空间，作品永不删除，可手动删除释放空间',
-      speed: '会员优先队列，预计等待30秒-2分钟',
-      concurrent: '同时可生成3个任务',
-      resolution: '最高4096x4096',
-      permissions: ['全部免费功能', '10秒视频生成', '局部重绘', '2倍扩图'],
-      extras: '优先体验所有新功能、专属客服通道（24小时内回复）',
-    },
-  },
-]
+interface MembershipPlan {
+  id: number
+  name: string
+  duration: string
+  durationDays: number
+  price: number
+  features: string[]
+  isHot: boolean
+}
 
-const compareItems = [
-  { key: 'price', label: '订阅价格', icon: '💰' },
-  { key: 'generationPrice', label: '生成定价', icon: '⚡' },
-  { key: 'watermark', label: '水印', icon: '📷' },
-  { key: 'storage', label: '云端存储', icon: '☁️' },
-  { key: 'speed', label: '生成速度', icon: '🚀' },
-  { key: 'concurrent', label: '并发生成数', icon: '🔧' },
-  { key: 'resolution', label: '最高分辨率', icon: '📐' },
-  { key: 'permissions', label: '功能权限', icon: '🔑' },
-  { key: 'extras', label: '其他权益', icon: '✨' },
-]
+interface MembershipStatus {
+  isMember: boolean
+  plan: {
+    name: string
+    type: string
+    startedAt: string
+    expiredAt: string
+  } | null
+  expiredAt: string | null
+}
 
 export default function Membership() {
+  const { token, user, updateUser } = useAuthStore()
+  const [plans, setPlans] = useState<MembershipPlan[]>([])
+  const [status, setStatus] = useState<MembershipStatus | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [subscribing, setSubscribing] = useState<number | null>(null)
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true)
+      try {
+        const [plansRes, statusRes] = await Promise.all([
+          fetch('/api/membership/plans', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/membership/status', { headers: { Authorization: `Bearer ${token}` } }),
+        ])
+        const plansData = await plansRes.json()
+        const statusData = await statusRes.json()
+        if (plansData?.success) setPlans(plansData.data.plans)
+        if (statusData?.success) setStatus(statusData.data)
+      } catch (err) {
+        console.error('加载会员数据失败:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    if (token) loadData()
+  }, [token])
+
+  const handleSubscribe = async (planId: number) => {
+    setSubscribing(planId)
+    try {
+      const res = await fetch('/api/membership/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ planId }),
+      })
+      const data = await res.json()
+      if (data?.success) {
+        alert(`订阅成功！${data.data.plan.name}，有效期至 ${new Date(data.data.expiredAt).toLocaleDateString()}`)
+        const statusRes = await fetch('/api/membership/status', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const statusData = await statusRes.json()
+        if (statusData?.success) setStatus(statusData.data)
+        const meRes = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const meData = await meRes.json()
+        if (meData?.success && meData.data?.user) {
+          updateUser(meData.data.user)
+        }
+      } else {
+        alert(data?.error || '订阅失败')
+      }
+    } catch (err) {
+      alert('订阅失败')
+    } finally {
+      setSubscribing(null)
+    }
+  }
+
+  const freePlan = {
+    name: '免费用户',
+    price: 0,
+    duration: '永久',
+    features: ['基础生成', '带水印下载', '500MB存储', '公共队列'],
+  }
+
   return (
     <Layout showTopBar={true}>
       <div className="p-6">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-slate-800 mb-2">会员体系</h1>
-            <p className="text-slate-500">选择适合你的创作方案，解锁更快生成、更高清下载与更多高级功能</p>
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">会员体系</h1>
+          <p className="text-slate-500">选择适合你的创作方案，解锁更快生成、更高清下载与更多高级功能</p>
+          {status?.isMember && (
+            <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-sm">
+              <Crown className="w-4 h-4" />
+              当前会员：{status.plan?.name}，有效期至 {new Date(status.expiredAt!).toLocaleDateString()}
+            </div>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="text-center py-20 text-slate-400">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
+            加载中...
           </div>
-
-          {/* Plans */}
-          <div className="grid grid-cols-3 gap-6 mb-10">
-            {plans.map((plan, i) => (
-              <div
-                key={i}
-                className={`relative bg-white rounded-2xl border p-6 transition-all hover:shadow-lg ${
-                  i === 1 ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-100'
-                }`}
-              >
-                {plan.badge && (
-                  <span
-                    className={`absolute -top-0 right-6 px-3 py-1 text-xs font-medium rounded-b-lg ${plan.badgeColor}`}
-                  >
-                    {plan.badge}
-                  </span>
-                )}
-
-                <h3 className="text-lg font-medium text-slate-800 mb-4">{plan.name}</h3>
-
+        ) : (
+          <>
+            {/* Plans */}
+            <div className="grid grid-cols-4 gap-6 mb-10">
+              {/* Free Plan */}
+              <div className="relative bg-white rounded-2xl border border-slate-100 p-6 transition-all hover:shadow-lg">
+                <span className="absolute -top-0 right-6 px-3 py-1 text-xs font-medium rounded-b-lg bg-slate-100 text-slate-500">
+                  当前方案
+                </span>
+                <h3 className="text-lg font-medium text-slate-800 mb-4">{freePlan.name}</h3>
                 <div className="flex items-baseline gap-1 mb-1">
-                  <span className="text-4xl font-bold text-blue-600">{plan.price}</span>
-                  <span className="text-slate-500">{plan.unit}</span>
+                  <span className="text-4xl font-bold text-slate-400">{freePlan.price}</span>
+                  <span className="text-slate-500">元</span>
                 </div>
-                {plan.period && <p className="text-sm text-slate-400 mb-6">{plan.period}</p>}
-                {i === 2 && <p className="text-sm text-red-500 mb-6">买10送2</p>}
-
-                <button className={`w-full py-3 rounded-xl text-sm font-medium transition-all ${plan.buttonStyle}`}>
-                  {plan.buttonText}
+                <p className="text-sm text-slate-400 mb-6">{freePlan.duration}</p>
+                <button className="w-full py-3 rounded-xl text-sm font-medium bg-slate-100 text-slate-500 cursor-default">
+                  当前使用中
                 </button>
-              </div>
-            ))}
-          </div>
-
-          {/* Compare Table */}
-          <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden mb-8">
-            <div className="px-6 py-4 border-b border-slate-100">
-              <h3 className="font-medium text-slate-800">权益对比表</h3>
-            </div>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  <th className="px-6 py-3 text-left text-sm font-medium text-slate-500 w-32">权益项</th>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-slate-500">
-                    <div className="flex items-center gap-2">
-                      <Crown className="w-4 h-4 text-slate-400" />
-                      免费用户
+                <div className="mt-4 space-y-2">
+                  {freePlan.features.map((f) => (
+                    <div key={f} className="flex items-center gap-2 text-sm text-slate-500">
+                      <Check className="w-4 h-4 text-slate-300" />
+                      {f}
                     </div>
-                  </th>
-                  <th className="px-6 py-3 text-left text-sm font-medium text-blue-600">
-                    <div className="flex items-center gap-2">
-                      <Crown className="w-4 h-4 text-blue-500" />
-                      基础会员（含月付/年付）
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {compareItems.map((item, idx) => (
-                  <tr key={item.key} className={idx % 2 === 0 ? 'bg-slate-50/50' : ''}>
-                    <td className="px-6 py-4 text-sm text-slate-600">{item.label}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {Array.isArray(plans[0].features[item.key as keyof typeof plans[0]['features']]) ? (
-                        <div className="flex flex-wrap gap-2">
-                          {(plans[0].features[item.key as keyof typeof plans[0]['features']] as string[]).map((f) => (
-                            <span key={f} className="inline-flex items-center gap-1 text-green-600">
-                              <Check className="w-3.5 h-3.5" />
-                              {f}
-                            </span>
-                          ))}
-                        </div>
-                      ) : item.key === 'watermark' ? (
-                        <span className="inline-flex items-center gap-1 text-green-600">
-                          <Check className="w-3.5 h-3.5" />
-                          {plans[0].features[item.key as keyof typeof plans[0]['features']]}
-                        </span>
-                      ) : (
-                        plans[0].features[item.key as keyof typeof plans[0]['features']]
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {Array.isArray(plans[1].features[item.key as keyof typeof plans[1]['features']]) ? (
-                        <div className="flex flex-wrap gap-2">
-                          {(plans[1].features[item.key as keyof typeof plans[1]['features']] as string[]).map((f) => (
-                            <span key={f} className="inline-flex items-center gap-1 text-green-600">
-                              <Check className="w-3.5 h-3.5" />
-                              {f}
-                            </span>
-                          ))}
-                        </div>
-                      ) : item.key === 'watermark' ? (
-                        <span className="inline-flex items-center gap-1 text-red-500">
-                          <X className="w-3.5 h-3.5" />
-                          {plans[1].features[item.key as keyof typeof plans[1]['features']]}
-                        </span>
-                      ) : (
-                        plans[1].features[item.key as keyof typeof plans[1]['features']]
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </div>
+              </div>
 
-          {/* Footer Info */}
-          <div className="grid grid-cols-3 gap-6">
-            <div className="flex items-start gap-3 bg-white rounded-2xl border border-slate-100 p-5">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-                <Info className="w-5 h-5 text-blue-500" />
+              {/* Paid Plans */}
+              {plans.map((plan) => (
+                <div
+                  key={plan.id}
+                  className={`relative bg-white rounded-2xl border p-6 transition-all hover:shadow-lg ${
+                    plan.isHot ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-100'
+                  }`}
+                >
+                  {plan.isHot && (
+                    <span className="absolute -top-0 right-6 px-3 py-1 text-xs font-medium rounded-b-lg bg-blue-500 text-white">
+                      推荐
+                    </span>
+                  )}
+                  <h3 className="text-lg font-medium text-slate-800 mb-4">{plan.name}</h3>
+                  <div className="flex items-baseline gap-1 mb-1">
+                    <span className="text-4xl font-bold text-blue-600">¥{(plan.price / 100).toFixed(0)}</span>
+                    <span className="text-slate-500">/{plan.duration}</span>
+                  </div>
+                  <p className="text-sm text-slate-400 mb-6">{plan.durationDays}天</p>
+                  <button
+                    onClick={() => handleSubscribe(plan.id)}
+                    disabled={subscribing === plan.id || status?.isMember}
+                    className={`w-full py-3 rounded-xl text-sm font-medium transition-all ${
+                      plan.isHot
+                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:shadow-lg'
+                        : 'bg-white border-2 border-blue-500 text-blue-600 hover:bg-blue-50'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {subscribing === plan.id ? '处理中...' : status?.isMember ? '已是会员' : '立即开通'}
+                  </button>
+                  <div className="mt-4 space-y-2">
+                    {plan.features.map((f) => (
+                      <div key={f} className="flex items-center gap-2 text-sm text-slate-600">
+                        <Check className="w-4 h-4 text-green-500" />
+                        {f}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer Info */}
+            <div className="grid grid-cols-3 gap-6">
+              <div className="flex items-start gap-3 bg-white rounded-2xl border border-slate-100 p-5">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <Info className="w-5 h-5 text-blue-500" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-slate-800 mb-1">权益说明</h4>
+                  <p className="text-sm text-slate-500">会员仅提升权益与效率，不额外改变单次生成消耗规则</p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-medium text-slate-800 mb-1">权益说明</h4>
-                <p className="text-sm text-slate-500">会员仅提升权益与效率，不额外改变单次生成消耗规则</p>
+              <div className="flex items-start gap-3 bg-white rounded-2xl border border-slate-100 p-5">
+                <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
+                  <Calendar className="w-5 h-5 text-purple-500" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-slate-800 mb-1">订阅说明</h4>
+                  <p className="text-sm text-slate-500">年付会员与月付会员功能一致，仅订阅周期不同</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 bg-white rounded-2xl border border-slate-100 p-5">
+                <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0">
+                  <Shield className="w-5 h-5 text-green-500" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-slate-800 mb-1">温馨提示</h4>
+                  <p className="text-sm text-slate-500">免费用户生成内容可预览，但因水印限制不建议用于商业用途</p>
+                </div>
               </div>
             </div>
-            <div className="flex items-start gap-3 bg-white rounded-2xl border border-slate-100 p-5">
-              <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center flex-shrink-0">
-                <Calendar className="w-5 h-5 text-purple-500" />
-              </div>
-              <div>
-                <h4 className="font-medium text-slate-800 mb-1">订阅说明</h4>
-                <p className="text-sm text-slate-500">年付会员与月付会员功能一致，仅订阅周期不同</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 bg-white rounded-2xl border border-slate-100 p-5">
-              <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0">
-                <Shield className="w-5 h-5 text-green-500" />
-              </div>
-              <div>
-                <h4 className="font-medium text-slate-800 mb-1">温馨提示</h4>
-                <p className="text-sm text-slate-500">免费用户生成内容可预览，但因水印限制不建议用于商业用途</p>
-              </div>
-            </div>
-          </div>
+          </>
+        )}
       </div>
     </Layout>
   )

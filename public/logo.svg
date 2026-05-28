@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 100" width="520" height="100">
+  <defs>
+    <!-- 左环渐变 -->
+    <linearGradient id="leftGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#93C5FD"/>
+      <stop offset="50%" stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+    
+    <!-- 左环暗面 -->
+    <linearGradient id="leftDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1E40AF"/>
+    </linearGradient>
+
+    <!-- 右环渐变 -->
+    <linearGradient id="rightGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#C4B5FD"/>
+      <stop offset="50%" stop-color="#A78BFA"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    
+    <!-- 右环暗面 -->
+    <linearGradient id="rightDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#5B21B6"/>
+    </linearGradient>
+
+    <!-- 球体径向渐变 -->
+    <radialGradient id="sphereGrad" cx="30%" cy="25%" r="70%" fx="25%" fy="20%">
+      <stop offset="0%" stop-color="#EEF2FF"/>
+      <stop offset="20%" stop-color="#C7D2FE"/>
+      <stop offset="50%" stop-color="#818CF8"/>
+      <stop offset="80%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#4338CA"/>
+    </radialGradient>
+
+    <!-- 阴影 -->
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <!-- 无限符号 - 使用粗描边 -->
+  <g filter="url(#shadow)">
+    <!-- 左环 - 粗描边 -->
+    <path d="M 95 50
+             C 85 60, 70 68, 55 68
+             C 35 68, 24 57, 24 42
+             C 24 27, 37 18, 53 18
+             C 67 18, 79 27, 87 36
+             C 91 42, 94 46, 95 50"
+          fill="none"
+          stroke="url(#leftGrad)"
+          stroke-width="22"
+          stroke-linecap="round"/>
+    
+    <!-- 左环暗面叠加 -->
+    <path d="M 95 50
+             C 85 60, 70 68, 55 68
+             C 35 68, 24 57, 24 42"
+          fill="none"
+          stroke="url(#leftDark)"
+          stroke-width="22"
+          stroke-linecap="round"
+          opacity="0.4"/>
+    
+    <!-- 右环 - 粗描边 -->
+    <path d="M 95 50
+             C 105 60, 120 68, 135 68
+             C 155 68, 166 57, 166 42
+             C 166 27, 153 18, 137 18
+             C 123 18, 111 27, 103 36
+             C 99 42, 96 46, 95 50"
+          fill="none"
+          stroke="url(#rightGrad)"
+          stroke-width="22"
+          stroke-linecap="round"/>
+    
+    <!-- 右环暗面叠加 -->
+    <path d="M 95 50
+             C 105 60, 120 68, 135 68
+             C 155 68, 166 57, 166 42"
+          fill="none"
+          stroke="url(#rightDark)"
+          stroke-width="22"
+          stroke-linecap="round"
+          opacity="0.4"/>
+  </g>
+
+  <!-- 中心交叉处高光 -->
+  <ellipse cx="95" cy="50" rx="12" ry="8" fill="#C4B5FD" opacity="0.5"/>
+
+  <!-- 粒子轨迹 -->
+  <g opacity="0.85">
+    <circle cx="130" cy="26" r="3" fill="#DDD6FE"/>
+    <circle cx="124" cy="31" r="2.6" fill="#E9D5FF"/>
+    <circle cx="118" cy="36" r="2.3" fill="#F3E8FF"/>
+    <circle cx="112" cy="40" r="2" fill="#FAE8FF"/>
+    <circle cx="107" cy="44" r="1.7" fill="#FDF4FF"/>
+    <circle cx="102" cy="47" r="1.4" fill="#FDF4FF" opacity="0.8"/>
+    <circle cx="98" cy="49" r="1.1" fill="#FDF4FF" opacity="0.6"/>
+  </g>
+
+  <!-- 3D 球体 -->
+  <circle cx="142" cy="16" r="12" fill="url(#sphereGrad)" filter="url(#shadow)"/>
+  <ellipse cx="137" cy="10" rx="4.5" ry="3.5" fill="white" opacity="0.9"/>
+  <ellipse cx="139" cy="12" rx="2.5" ry="2" fill="white" opacity="0.5"/>
+
+  <!-- 文字: XinMeng -->
+  <text x="175" y="58"
+        font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif"
+        font-size="38"
+        font-weight="500"
+        fill="#1E293B"
+        letter-spacing="-0.5">XinMeng</text>
+
+  <!-- 文字: AI -->
+  <g transform="translate(370, 22)">
+    <path d="M 0 36 L 13 2 L 26 36" 
+          fill="none" 
+          stroke="url(#rightGrad)" 
+          stroke-width="5.5" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"/>
+    <line x1="5" y1="25" x2="21" y2="25" 
+          stroke="url(#rightGrad)" 
+          stroke-width="4.5" 
+          stroke-linecap="round"/>
+    <line x1="38" y1="2" x2="38" y2="36" 
+          stroke="url(#rightGrad)" 
+          stroke-width="5.5" 
+          stroke-linecap="round"/>
+  </g>
+</svg>

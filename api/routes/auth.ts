@@ -1,10 +1,36 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
-import { v4 as uuidv4 } from 'uuid'
+import { generateToken, authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { getUserByEmail, createUser } from '../services/userService.js'
+import { success, error } from '../utils/response.js'
+import { validate, loginSchema } from '../utils/validator.js'
+import { trackLoginAttempt } from '../middleware/security.js'
 import db from '../db.js'
-import { generateToken } from '../middleware/auth.js'
 
 const router = Router()
+
+function getClientIp(req: Request): string {
+  const forwarded = req.headers['x-forwarded-for']
+  if (typeof forwarded === 'string') return forwarded.split(',')[0].trim()
+  const realIp = req.headers['x-real-ip']
+  if (typeof realIp === 'string') return realIp
+  return req.ip || req.socket.remoteAddress || 'unknown'
+}
+
+function getFingerprint(req: Request): string {
+  const ua = req.headers['user-agent'] || ''
+  const accept = req.headers['accept'] || ''
+  const lang = req.headers['accept-language'] || ''
+  const encoding = req.headers['accept-encoding'] || ''
+  const raw = `${ua}|${accept}|${lang}|${encoding}`
+  let hash = 0
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash
+  }
+  return `fp_${Math.abs(hash).toString(36)}`
+}
 
 function generateCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
@@ -13,7 +39,7 @@ function generateCode(): string {
 router.post('/send-code', (req: Request, res: Response): void => {
   const { email } = req.body
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    res.status(400).json({ success: false, error: 'Invalid email' })
+    error(res, 'Invalid email', 400)
     return
   }
 
@@ -25,109 +51,101 @@ router.post('/send-code', (req: Request, res: Response): void => {
   )
   stmt.run(email, code, expiresAt)
 
-  console.log(`[Verify Code] ${email}: ${code}`)
-
-  res.json({
-    success: true,
-    message: 'Verification code sent',
-    demoCode: code,
-  })
+  success(res, { message: 'Verification code sent' })
 })
 
 router.post('/login', (req: Request, res: Response): void => {
-  const { email, code } = req.body
-  if (!email || !code) {
-    res.status(400).json({ success: false, error: 'Email and code required' })
+  const clientIp = getClientIp(req)
+  const fingerprint = getFingerprint(req)
+
+  const validation = validate(loginSchema, req.body)
+  if (!validation.success) {
+    trackLoginAttempt(clientIp, req.body?.email || null, fingerprint, false)
+    error(res, validation.error, 400)
     return
   }
+
+  const { email, code } = validation.data
 
   const record = db.prepare('SELECT * FROM verify_codes WHERE email = ?').get(email) as
     | { code: string; expires_at: string }
     | undefined
 
   if (!record) {
-    res.status(400).json({ success: false, error: 'Code not found' })
+    trackLoginAttempt(clientIp, email, fingerprint, false)
+    error(res, 'Code not found', 400)
     return
   }
 
   if (record.code !== code) {
-    res.status(400).json({ success: false, error: 'Invalid code' })
+    trackLoginAttempt(clientIp, email, fingerprint, false)
+    error(res, 'Invalid code', 400)
     return
   }
 
   if (new Date(record.expires_at) < new Date()) {
-    res.status(400).json({ success: false, error: 'Code expired' })
+    trackLoginAttempt(clientIp, email, fingerprint, false)
+    error(res, 'Code expired', 400)
     return
   }
 
   db.prepare('DELETE FROM verify_codes WHERE email = ?').run(email)
 
-  let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as
-    | { id: number; email: string; nickname: string; avatar: string; credits: number; is_member: number; is_admin: number }
-    | undefined
+  let user = getUserByEmail(email)
 
   if (!user) {
-    const result = db
-      .prepare('INSERT INTO users (email, nickname, avatar) VALUES (?, ?, ?)')
-      .run(email, email.split('@')[0], `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`)
-    user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid) as typeof user
+    user = createUser(email, email.split('@')[0], `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`)
   }
 
-  const token = generateToken({ id: user!.id, email: user!.email, isAdmin: !!user!.is_admin })
+  if (user.isBanned) {
+    trackLoginAttempt(clientIp, email, fingerprint, false)
+    error(res, 'Account is banned', 403)
+    return
+  }
 
-  res.json({
-    success: true,
+  trackLoginAttempt(clientIp, email, fingerprint, true)
+
+  const token = generateToken({ id: user.id, email: user.email, nickname: user.nickname, avatar: user.avatar, isAdmin: user.isAdmin })
+
+  success(res, {
     token,
     user: {
-      id: user!.id,
-      email: user!.email,
-      nickname: user!.nickname,
-      avatar: user!.avatar,
-      credits: user!.credits,
-      isMember: !!user!.is_member,
-      isAdmin: !!user!.is_admin,
+      id: user.id,
+      email: user.email,
+      nickname: user.nickname,
+      avatar: user.avatar,
+      credits: user.credits,
+      isMember: user.isMember,
+      isAdmin: user.isAdmin,
     },
   })
 })
 
-router.get('/me', async (req: Request, res: Response): Promise<void> => {
-  const authHeader = req.headers.authorization
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ success: false, error: 'Unauthorized' })
+router.get('/me', authMiddleware, (req: AuthRequest, res: Response): void => {
+  const user = getUserById(req.user!.id)
+
+  if (!user) {
+    error(res, 'User not found', 404)
     return
   }
 
-  const token = authHeader.substring(7)
-  try {
-    const jwt = await import('jsonwebtoken')
-    const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'xinmeng-ai-secret-key-2026') as {
-      id: number
-      email: string
-    }
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(decoded.id) as
-      | { id: number; email: string; nickname: string; avatar: string; credits: number; is_member: number; is_admin: number }
-      | undefined
-
-    if (!user) {
-      res.status(404).json({ success: false, error: 'User not found' })
-      return
-    }
-
-    res.json({
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        nickname: user.nickname,
-        avatar: user.avatar,
-        credits: user.credits,
-        isMember: !!user.is_member,
-        isAdmin: !!user.is_admin,
-      },
-    })
-  } catch {
-    res.status(401).json({ success: false, error: 'Invalid token' })
-  }
+  success(res, {
+    user: {
+      id: user.id,
+      email: user.email,
+      nickname: user.nickname,
+      avatar: user.avatar,
+      credits: user.credits,
+      isMember: user.isMember,
+      isAdmin: user.isAdmin,
+    },
+  })
 })
+
+function getUserById(userId: number) {
+  return getUserByEmail(
+    (db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string } | undefined)?.email || ''
+  )
+}
 
 export default router

@@ -5,13 +5,15 @@ services:
     build: .
     container_name: xinmeng-ai
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     volumes:
       - ./data:/app/data
+      - ./public/uploads:/app/public/uploads
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - JWT_SECRET=xinmeng-ai-secret-key-2026
+      - JWT_SECRET=${JWT_SECRET}
+      - FRONTEND_URL=${FRONTEND_URL}
     restart: always
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]

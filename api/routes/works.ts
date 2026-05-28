@@ -1,50 +1,28 @@
 import { Router } from 'express'
 import type { Response } from 'express'
-import db from '../db.js'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
+import { getWorksByUser, getWorkById, deleteWork } from '../services/workService.js'
+import { success, error } from '../utils/response.js'
 
 const router = Router()
 
 router.get('/', authMiddleware, (req: AuthRequest, res: Response): void => {
-  const userId = req.user!.id
-  const works = db
-    .prepare('SELECT * FROM works WHERE user_id = ? ORDER BY created_at DESC LIMIT 50')
-    .all(userId) as Array<{
-    id: number
-    type: string
-    prompt: string
-    result_url: string
-    thumbnail_url: string
-    status: string
-    created_at: string
-  }>
-
-  res.json({
-    success: true,
-    works: works.map((w) => ({
-      id: w.id,
-      type: w.type,
-      prompt: w.prompt,
-      resultUrl: w.result_url,
-      thumbnailUrl: w.thumbnail_url,
-      status: w.status,
-      createdAt: w.created_at,
-    })),
-  })
+  const works = getWorksByUser(req.user!.id)
+  success(res, { works })
 })
 
 router.delete('/:id', authMiddleware, (req: AuthRequest, res: Response): void => {
   const userId = req.user!.id
-  const workId = req.params.id
+  const workId = parseInt(req.params.id)
 
-  const work = db.prepare('SELECT * FROM works WHERE id = ? AND user_id = ?').get(workId, userId)
-  if (!work) {
-    res.status(404).json({ success: false, error: 'Work not found' })
+  const work = getWorkById(workId)
+  if (!work || work.user_id !== userId) {
+    error(res, 'Work not found', 404)
     return
   }
 
-  db.prepare('DELETE FROM works WHERE id = ?').run(workId)
-  res.json({ success: true, message: 'Work deleted' })
+  deleteWork(workId)
+  success(res, { message: 'Work deleted' })
 })
 
 export default router

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XinMeng AI Logo Preview</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #1e293b;
+            margin-bottom: 30px;
+        }
+        .logo-section {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        .logo-section h2 {
+            color: #475569;
+            margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        .logo-large {
+            width: 100%;
+            max-width: 600px;
+            height: auto;
+        }
+        .logo-medium {
+            width: 300px;
+            height: auto;
+        }
+        .logo-small {
+            width: 150px;
+            height: auto;
+        }
+        .size-row {
+            display: flex;
+            align-items: center;
+            gap: 40px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .size-item {
+            text-align: center;
+        }
+        .size-label {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .dark-bg {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        }
+        .dark-bg h2 {
+            color: #cbd5e1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>XinMeng AI Logo 预览</h1>
+        
+        <div class="logo-section">
+            <h2>大尺寸 (600px)</h2>
+            <img src="/logo.svg" alt="XinMeng AI Logo" class="logo-large">
+        </div>
+
+        <div class="logo-section">
+            <h2>多种尺寸对比</h2>
+            <div class="size-row">
+                <div class="size-item">
+                    <img src="/logo.svg" alt="XinMeng AI Logo" class="logo-large">
+                    <div class="size-label">600px</div>
+                </div>
+                <div class="size-item">
+                    <img src="/logo.svg" alt="XinMeng AI Logo" class="logo-medium">
+                    <div class="size-label">300px</div>
+                </div>
+                <div class="size-item">
+                    <img src="/logo.svg" alt="XinMeng AI Logo" class="logo-small">
+                    <div class="size-label">150px</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="logo-section dark-bg">
+            <h2>深色背景效果</h2>
+            <img src="/logo.svg" alt="XinMeng AI Logo" class="logo-large">
+        </div>
+    </div>
+</body>
+</html>

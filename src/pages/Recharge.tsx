@@ -1,9 +1,16 @@
-import { useState } from 'react'
-import { Check, Shield } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Check, Shield, Zap, Gift } from 'lucide-react'
 import Layout from '@/components/Layout'
 import { useAuthStore } from '@/store/authStore'
 
-const PRESET_AMOUNTS = [10, 20, 50, 100, 200]
+interface RechargePackage {
+  id: number
+  name: string
+  credits: number
+  price: number
+  bonus: number
+  isHot: boolean
+}
 
 const PAYMENT_METHODS = [
   {
@@ -28,48 +35,87 @@ const PAYMENT_METHODS = [
       </div>
     ),
   },
-  {
-    id: 'card',
-    name: '银行卡支付',
-    icon: (
-      <div className="w-10 h-10 rounded-xl bg-[#FF6A00] flex items-center justify-center flex-shrink-0">
-        <svg viewBox="0 0 24 24" className="w-6 h-6 text-white" fill="currentColor">
-          <path d="M20,4H4A2,2 0 0,0 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V6A2,2 0 0,0 20,4M20,18H4V12H20V18M20,8H4V6H20V8Z" />
-        </svg>
-      </div>
-    ),
-  },
 ]
 
 export default function Recharge() {
-  const { user } = useAuthStore()
-  const [selectedAmount, setSelectedAmount] = useState(50)
-  const [customAmount, setCustomAmount] = useState('')
-  const [isCustom, setIsCustom] = useState(false)
+  const { user, token, updateUser } = useAuthStore()
+  const [packages, setPackages] = useState<RechargePackage[]>([])
+  const [selectedPackage, setSelectedPackage] = useState<number | null>(null)
   const [paymentMethod, setPaymentMethod] = useState('wechat')
+  const [loading, setLoading] = useState(false)
+  const [orderLoading, setOrderLoading] = useState(false)
 
   const balance = user?.credits || 0
 
-  const handleAmountClick = (amount: number) => {
-    setSelectedAmount(amount)
-    setIsCustom(false)
-    setCustomAmount('')
-  }
+  useEffect(() => {
+    const loadPackages = async () => {
+      setLoading(true)
+      try {
+        const res = await fetch('/api/payment/packages', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const data = await res.json()
+        if (data?.success && data.data?.packages) {
+          setPackages(data.data.packages)
+          if (data.data.packages.length > 0) {
+            setSelectedPackage(data.data.packages[0].id)
+          }
+        }
+      } catch (err) {
+        console.error('加载套餐失败:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    if (token) loadPackages()
+  }, [token])
 
-  const handleCustomClick = () => {
-    setIsCustom(true)
-    setSelectedAmount(0)
-  }
+  const selectedPkg = packages.find((p) => p.id === selectedPackage)
 
-  const handleCustomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, '')
-    setCustomAmount(value)
-    if (value) {
-      setSelectedAmount(parseInt(value))
+  const handleRecharge = async () => {
+    if (!selectedPackage) return
+    setOrderLoading(true)
+    try {
+      const res = await fetch('/api/payment/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ packageId: selectedPackage }),
+      })
+      const data = await res.json()
+      if (data?.success && data.data?.order) {
+        alert(`订单创建成功！订单号: ${data.data.order.orderNo}\n金额: ¥${(data.data.order.amount / 100).toFixed(2)}\n获得积分: ${data.data.order.credits}`)
+
+        const callbackRes = await fetch('/api/payment/callback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderNo: data.data.order.orderNo,
+            paymentMethod: paymentMethod === 'wechat' ? '微信支付' : '支付宝',
+          }),
+        })
+        const callbackData = await callbackRes.json()
+        if (callbackData?.success) {
+          alert(`支付成功！获得 ${callbackData.data.credits} 积分`)
+          const meRes = await fetch('/api/auth/me', {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          const meData = await meRes.json()
+          if (meData?.success && meData.data?.user) {
+            updateUser(meData.data.user)
+          }
+        }
+      } else {
+        alert(data?.error || '创建订单失败')
+      }
+    } catch (err) {
+      alert('充值失败')
+    } finally {
+      setOrderLoading(false)
     }
   }
-
-  const finalAmount = isCustom ? (parseInt(customAmount) || 0) : selectedAmount
 
   return (
     <Layout
@@ -86,99 +132,126 @@ export default function Recharge() {
       }
     >
       <div className="max-w-3xl mx-auto py-10 px-6">
-        {/* Recharge Amount */}
-        <div className="mb-8">
-          <h3 className="text-base font-medium text-slate-900 mb-4">充值金额（单位：元）</h3>
-          <div className="grid grid-cols-6 gap-3">
-            {PRESET_AMOUNTS.map((amount) => (
-              <button
-                key={amount}
-                onClick={() => handleAmountClick(amount)}
-                className={`relative py-3 px-4 rounded-xl border-2 text-center transition-all ${
-                  !isCustom && selectedAmount === amount
-                    ? 'border-blue-500 bg-blue-50 text-blue-600'
-                    : 'border-slate-200 text-slate-700 hover:border-slate-300'
-                }`}
-              >
-                <span className="text-sm font-medium">{amount}元</span>
-                {!isCustom && selectedAmount === amount && (
-                  <div className="absolute top-0 right-0 w-5 h-5 bg-blue-500 rounded-bl-lg flex items-center justify-center">
-                    <Check className="w-3 h-3 text-white" />
-                  </div>
-                )}
-              </button>
-            ))}
-            <button
-              onClick={handleCustomClick}
-              className={`relative py-3 px-4 rounded-xl border-2 text-center transition-all ${
-                isCustom
-                  ? 'border-blue-500 bg-blue-50 text-blue-600'
-                  : 'border-slate-200 text-slate-700 hover:border-slate-300'
-              }`}
-            >
-              <span className="text-sm font-medium">其他金额</span>
-              {isCustom && (
-                <div className="absolute top-0 right-0 w-5 h-5 bg-blue-500 rounded-bl-lg flex items-center justify-center">
-                  <Check className="w-3 h-3 text-white" />
+        {loading ? (
+          <div className="text-center py-20 text-slate-400">加载中...</div>
+        ) : (
+          <>
+            {/* Recharge Packages */}
+            <div className="mb-8">
+              <h3 className="text-base font-medium text-slate-900 mb-4 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-500" />
+                选择充值套餐
+              </h3>
+              <div className="grid grid-cols-3 gap-4">
+                {packages.map((pkg) => (
+                  <button
+                    key={pkg.id}
+                    onClick={() => setSelectedPackage(pkg.id)}
+                    className={`relative p-5 rounded-2xl border-2 text-center transition-all ${
+                      selectedPackage === pkg.id
+                        ? 'border-blue-500 bg-blue-50 text-blue-600'
+                        : 'border-slate-200 text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    {pkg.isHot && (
+                      <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-medium">
+                        HOT
+                      </div>
+                    )}
+                    {pkg.bonus > 0 && (
+                      <div className="absolute top-2 right-2 flex items-center gap-0.5 text-[10px] text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full">
+                        <Gift className="w-3 h-3" />
+                        赠{pkg.bonus}
+                      </div>
+                    )}
+                    <div className="text-lg font-bold mb-1">{pkg.name}</div>
+                    <div className="text-2xl font-bold mb-1">
+                      ¥{(pkg.price / 100).toFixed(2)}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      获得 {pkg.credits + pkg.bonus} 积分
+                    </div>
+                    {selectedPackage === pkg.id && (
+                      <div className="absolute bottom-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                        <Check className="w-3 h-3 text-white" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Payment Method */}
+            <div className="mb-8">
+              <h3 className="text-base font-medium text-slate-900 mb-4">支付方式</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {PAYMENT_METHODS.map((method) => (
+                  <button
+                    key={method.id}
+                    onClick={() => setPaymentMethod(method.id)}
+                    className={`relative flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                      paymentMethod === method.id
+                        ? 'border-blue-500 bg-blue-50/50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {method.icon}
+                    <span className="text-sm font-medium text-slate-900">
+                      {method.name}
+                    </span>
+                    {paymentMethod === method.id && (
+                      <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                        <Check className="w-3 h-3 text-white" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Summary */}
+            {selectedPkg && (
+              <div className="mb-6 p-4 bg-slate-50 rounded-xl">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">充值套餐</span>
+                  <span className="font-medium">{selectedPkg.name}</span>
                 </div>
-              )}
+                <div className="flex items-center justify-between text-sm mt-2">
+                  <span className="text-slate-500">获得积分</span>
+                  <span className="font-medium text-blue-600">
+                    {selectedPkg.credits + selectedPkg.bonus} 积分
+                    {selectedPkg.bonus > 0 && (
+                      <span className="text-xs text-orange-500 ml-1">
+                        (含赠送 {selectedPkg.bonus})
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm mt-2 pt-2 border-t border-slate-200">
+                  <span className="text-slate-500">支付金额</span>
+                  <span className="text-lg font-bold text-slate-900">
+                    ¥{(selectedPkg.price / 100).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Recharge Button */}
+            <button
+              onClick={handleRecharge}
+              disabled={!selectedPackage || orderLoading}
+              className="w-full py-3.5 bg-blue-600 text-white text-base font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              {orderLoading ? '处理中...' : '立即充值'}
             </button>
-          </div>
-        </div>
 
-        {/* Custom Amount Input */}
-        <div className="mb-8">
-          <h3 className="text-base font-medium text-slate-900 mb-4">自定义金额（元）</h3>
-          <input
-            type="text"
-            value={customAmount}
-            onChange={handleCustomChange}
-            placeholder="请输入充值金额"
-            className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
-          />
-        </div>
-
-        {/* Payment Method */}
-        <div className="mb-8">
-          <h3 className="text-base font-medium text-slate-900 mb-4">支付方式</h3>
-          <div className="grid grid-cols-3 gap-3">
-            {PAYMENT_METHODS.map((method) => (
-              <button
-                key={method.id}
-                onClick={() => setPaymentMethod(method.id)}
-                className={`relative flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
-                  paymentMethod === method.id
-                    ? 'border-blue-500 bg-blue-50/50'
-                    : 'border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                {method.icon}
-                <span className="text-sm font-medium text-slate-900">
-                  {method.name}
-                </span>
-                {paymentMethod === method.id && (
-                  <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                    <Check className="w-3 h-3 text-white" />
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Recharge Button */}
-        <button
-          disabled={finalAmount <= 0}
-          className="w-full py-3.5 bg-blue-600 text-white text-base font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-        >
-          立即充值
-        </button>
-
-        {/* Security Note */}
-        <div className="mt-4 flex items-center justify-center gap-1.5 text-slate-400">
-          <Shield className="w-4 h-4" />
-          <span className="text-xs">安全支付保障中，您的信息将严格保密</span>
-        </div>
+            {/* Security Note */}
+            <div className="mt-4 flex items-center justify-center gap-1.5 text-slate-400">
+              <Shield className="w-4 h-4" />
+              <span className="text-xs">安全支付保障中，您的信息将严格保密</span>
+            </div>
+          </>
+        )}
       </div>
     </Layout>
   )

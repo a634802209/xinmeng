@@ -46,8 +46,12 @@ router.post('/projects', authMiddleware, (req: AuthRequest, res: Response): void
   const userId = req.user!.id
   const { name, nodes, connections } = req.body
 
-  if (!name || !Array.isArray(nodes) || !Array.isArray(connections)) {
-    res.status(400).json({ success: false, error: 'Invalid params' })
+  if (!name || typeof name !== 'string' || name.trim().length === 0 || name.trim().length > 100) {
+    res.status(400).json({ success: false, error: 'Name must be 1-100 characters' })
+    return
+  }
+  if (!Array.isArray(nodes) || !Array.isArray(connections)) {
+    res.status(400).json({ success: false, error: 'Nodes and connections must be arrays' })
     return
   }
 
@@ -62,6 +66,10 @@ router.post('/projects', authMiddleware, (req: AuthRequest, res: Response): void
 router.put('/projects/:id', authMiddleware, (req: AuthRequest, res: Response): void => {
   const userId = req.user!.id
   const projectId = parseInt(req.params.id)
+  if (isNaN(projectId) || projectId <= 0) {
+    res.status(400).json({ success: false, error: 'Invalid project ID' })
+    return
+  }
   const { name, nodes, connections } = req.body
 
   const project = db.prepare('SELECT id FROM canvas_projects WHERE id = ? AND user_id = ?').get(projectId, userId) as
@@ -77,14 +85,26 @@ router.put('/projects/:id', authMiddleware, (req: AuthRequest, res: Response): v
   const params: (string | number)[] = []
 
   if (name !== undefined) {
+    if (typeof name !== 'string' || name.trim().length === 0 || name.trim().length > 100) {
+      res.status(400).json({ success: false, error: 'Name must be 1-100 characters' })
+      return
+    }
     updates.push('name = ?')
-    params.push(name)
+    params.push(name.trim())
   }
   if (nodes !== undefined) {
+    if (!Array.isArray(nodes)) {
+      res.status(400).json({ success: false, error: 'Nodes must be an array' })
+      return
+    }
     updates.push('nodes = ?')
     params.push(JSON.stringify(nodes))
   }
   if (connections !== undefined) {
+    if (!Array.isArray(connections)) {
+      res.status(400).json({ success: false, error: 'Connections must be an array' })
+      return
+    }
     updates.push('connections = ?')
     params.push(JSON.stringify(connections))
   }
