@@ -387,8 +387,16 @@ export function initDB() {
       role TEXT DEFAULT 'admin',
       is_active INTEGER DEFAULT 1,
       last_login_at DATETIME,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      deleted_at DATETIME
     );
+
+    -- P2 修复：迁移添加 deleted_at 字段
+    try {
+      db.prepare('SELECT deleted_at FROM admin_accounts LIMIT 1').get()
+    } catch {
+      db.exec('ALTER TABLE admin_accounts ADD COLUMN deleted_at DATETIME')
+    }
 
     CREATE INDEX IF NOT EXISTS idx_admin_accounts_username ON admin_accounts(username);
 

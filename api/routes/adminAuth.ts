@@ -29,6 +29,26 @@ function validateLength(value: string, min: number, max: number, field: string):
   return null
 }
 
+// P2 修复：密码复杂度校验（大小写字母 + 数字 + 特殊字符，长度≥12）
+function validatePasswordComplexity(password: string): string | null {
+  if (password.length < 12) {
+    return 'Password must be at least 12 characters'
+  }
+  if (!/[A-Z]/.test(password)) {
+    return 'Password must contain at least one uppercase letter'
+  }
+  if (!/[a-z]/.test(password)) {
+    return 'Password must contain at least one lowercase letter'
+  }
+  if (!/[0-9]/.test(password)) {
+    return 'Password must contain at least one digit'
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    return 'Password must contain at least one special character'
+  }
+  return null
+}
+
 // Admin login with username/password
 router.post('/login', async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const { username, password } = req.body
@@ -173,8 +193,10 @@ router.post('/accounts', adminAuthMiddleware, requireSuperAdmin, async (req: Adm
     return
   }
 
-  if (password.length < 8) {
-    res.status(400).json({ success: false, error: 'Password must be at least 8 characters' })
+  // P2 修复：密码复杂度校验
+  const complexityError = validatePasswordComplexity(password)
+  if (complexityError) {
+    res.status(400).json({ success: false, error: complexityError })
     return
   }
 
@@ -213,7 +235,7 @@ router.patch('/accounts/:id/status', adminAuthMiddleware, requireSuperAdmin, (re
   res.json({ success: true })
 })
 
-// Delete admin account (superadmin only)
+// Delete admin account (superadmin only) - P2 修复：软删除
 router.delete('/accounts/:id', adminAuthMiddleware, requireSuperAdmin, (req: AdminAuthRequest, res: Response): void => {
   const id = parseInt(req.params.id)
 
@@ -222,8 +244,9 @@ router.delete('/accounts/:id', adminAuthMiddleware, requireSuperAdmin, (req: Adm
     return
   }
 
-  db.prepare('DELETE FROM admin_accounts WHERE id = ?').run(id)
-  res.json({ success: true })
+  // P2 修复：软删除，添加 deleted_at 标记
+  db.prepare('UPDATE admin_accounts SET is_active = 0, deleted_at = datetime("now") WHERE id = ?').run(id)
+  res.json({ success: true, message: 'Account soft deleted' })
 })
 
 export default router

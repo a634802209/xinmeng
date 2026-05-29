@@ -2,9 +2,9 @@ import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import db from '../db.js'
 
-const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET
+const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET
 if (!ADMIN_JWT_SECRET) {
-  throw new Error('ADMIN_JWT_SECRET or JWT_SECRET environment variable is required')
+  throw new Error('ADMIN_JWT_SECRET environment variable is required')
 }
 
 export interface AdminAuthRequest extends Request {

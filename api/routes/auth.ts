@@ -107,11 +107,14 @@ router.post('/login', (req: Request, res: Response): void => {
 
   const token = generateToken({ id: user.id, email: user.email, nickname: user.nickname, avatar: user.avatar, isAdmin: user.isAdmin })
 
+  // 低危修复：邮箱脱敏
+  const maskedEmail = maskEmail(user.email)
+
   success(res, {
     token,
     user: {
       id: user.id,
-      email: user.email,
+      email: maskedEmail,
       nickname: user.nickname,
       avatar: user.avatar,
       credits: user.credits,
@@ -129,10 +132,13 @@ router.get('/me', authMiddleware, (req: AuthRequest, res: Response): void => {
     return
   }
 
+  // 低危修复：邮箱脱敏
+  const maskedEmail = maskEmail(user.email)
+
   success(res, {
     user: {
       id: user.id,
-      email: user.email,
+      email: maskedEmail,
       nickname: user.nickname,
       avatar: user.avatar,
       credits: user.credits,
@@ -146,6 +152,14 @@ function getUserById(userId: number) {
   return getUserByEmail(
     (db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string } | undefined)?.email || ''
   )
+}
+
+// 低危修复：邮箱脱敏函数 a***@example.com
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@')
+  if (!local || !domain) return email
+  if (local.length <= 2) return `*@${domain}`
+  return `${local[0]}${'*'.repeat(local.length - 2)}${local[local.length - 1]}@${domain}`
 }
 
 export default router

@@ -44,24 +44,40 @@ export function createImageTask(userId: number, params: ImageGenerateParams): Ge
   const imagePrice = getPrice('image_price')
   const cost = imagePrice * (count || 1)
 
-  const user = getUserById(userId)
-  if (!user || user.credits < cost) {
-    throw new Error('余额不足，请充值')
-  }
+  // P2 修复：使用事务包裹积分扣除，防止竞态条件
+  const tx = db.transaction(() => {
+    // 悲观锁：先查询并锁定用户记录
+    const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId) as { credits: number } | undefined
+    if (!user || user.credits < cost) {
+      throw new Error('余额不足，请充值')
+    }
 
-  const newBalance = user.credits - cost
-  updateUserCredits(userId, newBalance)
-  addCreditRecord(userId, 'consume', -cost, newBalance, `图片生成 x${count || 1} - ${prompt.slice(0, 30)}`)
+    const newBalance = user.credits - cost
 
-  const taskId = uuidv4()
-  db.prepare(
-    'INSERT INTO generate_tasks (id, user_id, type, prompt, negative_prompt, aspect_ratio, quality, count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(taskId, userId, 'image', prompt, negativePrompt || '', aspectRatio || '16:9', quality || '标准', count || 1)
+    // 原子更新积分，确保余额充足
+    const updateResult = db.prepare(
+      'UPDATE users SET credits = credits - ? WHERE id = ? AND credits >= ?'
+    ).run(cost, userId, cost)
 
-  db.prepare('INSERT INTO works (user_id, type, prompt, status) VALUES (?, ?, ?, ?)').run(
-    userId, 'image', prompt, 'processing'
-  )
+    if (updateResult.changes === 0) {
+      throw new Error('余额不足，请充值')
+    }
 
+    addCreditRecord(userId, 'consume', -cost, newBalance, `图片生成 x${count || 1} - ${prompt.slice(0, 30)}`)
+
+    const taskId = uuidv4()
+    db.prepare(
+      'INSERT INTO generate_tasks (id, user_id, type, prompt, negative_prompt, aspect_ratio, quality, count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(taskId, userId, 'image', prompt, negativePrompt || '', aspectRatio || '16:9', quality || '标准', count || 1)
+
+    db.prepare('INSERT INTO works (user_id, type, prompt, status) VALUES (?, ?, ?, ?)').run(
+      userId, 'image', prompt, 'processing'
+    )
+
+    return { taskId, newBalance }
+  })
+
+  const { taskId, newBalance } = tx()
   simulateGeneration(taskId)
 
   return {
@@ -78,24 +94,38 @@ export function createVideoTask(userId: number, params: VideoGenerateParams): Ge
   const videoPrice = getPrice('video_price')
   const cost = videoPrice
 
-  const user = getUserById(userId)
-  if (!user || user.credits < cost) {
-    throw new Error('余额不足，请充值')
-  }
+  // P2 修复：使用事务包裹积分扣除，防止竞态条件
+  const tx = db.transaction(() => {
+    const user = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId) as { credits: number } | undefined
+    if (!user || user.credits < cost) {
+      throw new Error('余额不足，请充值')
+    }
 
-  const newBalance = user.credits - cost
-  updateUserCredits(userId, newBalance)
-  addCreditRecord(userId, 'consume', -cost, newBalance, `视频生成 - ${prompt.slice(0, 30)}`)
+    const newBalance = user.credits - cost
 
-  const taskId = uuidv4()
-  db.prepare(
-    'INSERT INTO generate_tasks (id, user_id, type, prompt, style) VALUES (?, ?, ?, ?, ?)'
-  ).run(taskId, userId, 'video', prompt, style || '默认')
+    const updateResult = db.prepare(
+      'UPDATE users SET credits = credits - ? WHERE id = ? AND credits >= ?'
+    ).run(cost, userId, cost)
 
-  db.prepare('INSERT INTO works (user_id, type, prompt, status) VALUES (?, ?, ?, ?)').run(
-    userId, 'video', prompt, 'processing'
-  )
+    if (updateResult.changes === 0) {
+      throw new Error('余额不足，请充值')
+    }
 
+    addCreditRecord(userId, 'consume', -cost, newBalance, `视频生成 - ${prompt.slice(0, 30)}`)
+
+    const taskId = uuidv4()
+    db.prepare(
+      'INSERT INTO generate_tasks (id, user_id, type, prompt, style) VALUES (?, ?, ?, ?, ?)'
+    ).run(taskId, userId, 'video', prompt, style || '默认')
+
+    db.prepare('INSERT INTO works (user_id, type, prompt, status) VALUES (?, ?, ?, ?)').run(
+      userId, 'video', prompt, 'processing'
+    )
+
+    return { taskId, newBalance }
+  })
+
+  const { taskId, newBalance } = tx()
   simulateGeneration(taskId, 60000)
 
   return {
