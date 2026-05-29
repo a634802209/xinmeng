@@ -74,7 +74,7 @@ NODE_ENV=production
 PORT=3001
 JWT_SECRET=${JWT_SECRET}
 ADMIN_JWT_SECRET=${ADMIN_SECRET}
-FRONTEND_URL=http://129.204.225.231:3001
+FRONTEND_URL=http://129.204.225.231
 DB_PATH=/app/data/app.db
 EOF
 ok "环境变量已写入 .env"
@@ -103,7 +103,7 @@ done
 echo ""
 echo -e "${GREEN}============================================${NC}"
 echo -e "${GREEN}  部署成功！${NC}"
-echo -e "${GREEN}  访问: http://129.204.225.231:3001${NC}"
+echo -e "${GREEN}  访问: http://129.204.225.231${NC}"
 echo -e "${GREEN}  管理员: admin / xinmeng2024${NC}"
 echo -e "${GREEN}============================================${NC}"
 echo ""

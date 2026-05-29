@@ -6,6 +6,13 @@ import { success, error } from '../utils/response.js'
 
 const router = Router()
 
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@')
+  if (!local || !domain) return email
+  if (local.length <= 2) return `*@${domain}`
+  return `${local[0]}${'*'.repeat(local.length - 2)}${local[local.length - 1]}@${domain}`
+}
+
 router.get('/profile', authMiddleware, (req: AuthRequest, res: Response): void => {
   const user = getUserById(req.user!.id)
 
@@ -17,7 +24,7 @@ router.get('/profile', authMiddleware, (req: AuthRequest, res: Response): void =
   success(res, {
     user: {
       id: user.id,
-      email: user.email,
+      email: maskEmail(user.email),
       nickname: user.nickname,
       avatar: user.avatar,
       credits: user.credits,
