@@ -9,6 +9,14 @@ const dbPath = process.env.DB_PATH || path.join(__dirname, '../data/app.db')
 const db = new Database(dbPath)
 db.pragma('journal_mode = WAL')
 
+function migrateColumn(table: string, column: string, def: string) {
+  try {
+    db.prepare(`SELECT ${column} FROM ${table} LIMIT 1`).get()
+  } catch {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${def}`)
+  }
+}
+
 export function initDB() {
   // Users table - with migration for new columns
   db.exec(`
@@ -28,33 +36,14 @@ export function initDB() {
     );
   `)
 
-  // Migrate: add is_admin if not exists
-  try {
-    db.prepare('SELECT is_admin FROM users LIMIT 1').get()
-  } catch {
-    db.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0')
-  }
+  // Migrate: add columns if not exists
+  migrateColumn('users', 'is_admin', 'INTEGER DEFAULT 0')
+  migrateColumn('users', 'is_banned', 'INTEGER DEFAULT 0')
+  migrateColumn('users', 'storage_used', 'INTEGER DEFAULT 0')
+  migrateColumn('users', 'storage_limit', 'INTEGER DEFAULT 104857600')
 
-  // Migrate: add is_banned if not exists
-  try {
-    db.prepare('SELECT is_banned FROM users LIMIT 1').get()
-  } catch {
-    db.exec('ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0')
-  }
-
-  // Migrate: add storage_used if not exists
-  try {
-    db.prepare('SELECT storage_used FROM users LIMIT 1').get()
-  } catch {
-    db.exec('ALTER TABLE users ADD COLUMN storage_used INTEGER DEFAULT 0')
-  }
-
-  // Migrate: add storage_limit if not exists
-  try {
-    db.prepare('SELECT storage_limit FROM users LIMIT 1').get()
-  } catch {
-    db.exec('ALTER TABLE users ADD COLUMN storage_limit INTEGER DEFAULT 104857600')
-  }
+  // Migrate: add deleted_at to admin_accounts if not exists
+  migrateColumn('admin_accounts', 'deleted_at', 'DATETIME')
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS works (
@@ -391,13 +380,6 @@ export function initDB() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       deleted_at DATETIME
     );
-
-    -- P2 修复：迁移添加 deleted_at 字段
-    try {
-      db.prepare('SELECT deleted_at FROM admin_accounts LIMIT 1').get()
-    } catch {
-      db.exec('ALTER TABLE admin_accounts ADD COLUMN deleted_at DATETIME')
-    }
 
     CREATE INDEX IF NOT EXISTS idx_admin_accounts_username ON admin_accounts(username);
 
