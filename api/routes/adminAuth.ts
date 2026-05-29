@@ -91,7 +91,7 @@ router.post('/login', async (req: AdminAuthRequest, res: Response): Promise<void
   }
 
   // Update last login
-  db.prepare('UPDATE admin_accounts SET last_login_at = datetime("now") WHERE id = ?').run(admin.id)
+  db.prepare("UPDATE admin_accounts SET last_login_at = datetime('now') WHERE id = ?").run(admin.id)
   trackLoginAttempt(clientIp, username, null, true)
 
   const token = generateAdminToken({ id: admin.id, username: admin.username, role: admin.role })
@@ -245,7 +245,7 @@ router.delete('/accounts/:id', adminAuthMiddleware, requireSuperAdmin, (req: Adm
   }
 
   // P2 修复：软删除，添加 deleted_at 标记
-  db.prepare('UPDATE admin_accounts SET is_active = 0, deleted_at = datetime("now") WHERE id = ?').run(id)
+  db.prepare("UPDATE admin_accounts SET is_active = 0, deleted_at = datetime('now') WHERE id = ?").run(id)
   res.json({ success: true, message: 'Account soft deleted' })
 })
 
