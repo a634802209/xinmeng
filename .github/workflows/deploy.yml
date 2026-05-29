@@ -1,0 +1,82 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script: |
+            set -e
+            PROJECT_DIR="$HOME/xinmeng-ai"
+            
+            echo "=== 开始部署 ==="
+            
+            # 1. 清理旧项目
+            if [ -d "$PROJECT_DIR" ]; then
+              cd "$PROJECT_DIR"
+              sudo docker compose -f docker-compose.prod.yml down 2>/dev/null || true
+              sudo docker rm -f xinmeng-ai 2>/dev/null || true
+              sudo docker rmi -f xinmeng-ai:latest 2>/dev/null || true
+              cd /
+              rm -rf "$PROJECT_DIR"
+            fi
+            
+            # 2. 克隆最新代码
+            mkdir -p "$PROJECT_DIR"
+            git clone --depth 1 https://github.com/a634802209/xinmeng.git "$PROJECT_DIR"
+            cd "$PROJECT_DIR"
+            
+            # 3. 创建目录
+            mkdir -p data public/uploads logs
+            
+            # 4. 环境变量（如果已有 .env 则保留，否则生成新的）
+            if [ -f "$HOME/.xinmeng-env" ]; then
+              cp "$HOME/.xinmeng-env" .env
+              echo "使用已有环境变量"
+            else
+              JWT_SECRET=$(openssl rand -hex 32)
+              ADMIN_SECRET=$(openssl rand -hex 32)
+              cat > .env << EOF
+NODE_ENV=production
+PORT=3001
+JWT_SECRET=${JWT_SECRET}
+ADMIN_JWT_SECRET=${ADMIN_SECRET}
+FRONTEND_URL=http://${{ secrets.SERVER_HOST }}
+DB_PATH=/app/data/app.db
+EOF
+              cp .env "$HOME/.xinmeng-env"
+              echo "已生成并保存环境变量到 ~/.xinmeng-env"
+            fi
+            
+            # 5. 构建并启动
+            echo "Docker 构建中..."
+            sudo docker compose -f docker-compose.prod.yml build --no-cache
+            sudo docker compose -f docker-compose.prod.yml up -d
+            
+            # 6. 等待就绪
+            echo "等待服务就绪..."
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:3001/api/health > /dev/null 2>&1; then
+                echo "服务启动成功"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "服务未就绪，查看日志："
+                sudo docker compose -f docker-compose.prod.yml logs --tail=50
+                exit 1
+              fi
+              sleep 2
+            done
+            
+            echo "=== 部署完成 ==="
+            echo "访问: http://${{ secrets.SERVER_HOST }}"
