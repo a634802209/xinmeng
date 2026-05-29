@@ -45,9 +45,6 @@ export function initDB() {
     migrateColumn('users', 'storage_used', 'INTEGER DEFAULT 0')
     migrateColumn('users', 'storage_limit', 'INTEGER DEFAULT 104857600')
 
-    // Migrate: add deleted_at to admin_accounts if not exists
-    migrateColumn('admin_accounts', 'deleted_at', 'DATETIME')
-
     db.exec(`
     CREATE TABLE IF NOT EXISTS works (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -385,6 +382,9 @@ export function initDB() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_admin_accounts_username ON admin_accounts(username);
+
+    -- Migrate: add deleted_at to admin_accounts if not exists (after table creation)
+    migrateColumn('admin_accounts', 'deleted_at', 'DATETIME')
 
     -- Insert default admin account (username: admin, password: xinmeng2024)
     -- Password hash for 'xinmeng2024' using bcrypt (generated with bcrypt.hash('xinmeng2024', 10))
