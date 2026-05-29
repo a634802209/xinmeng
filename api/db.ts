@@ -18,34 +18,37 @@ function migrateColumn(table: string, column: string, def: string) {
 }
 
 export function initDB() {
-  // Users table - with migration for new columns
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE NOT NULL,
-      nickname TEXT,
-      avatar TEXT,
-      credits INTEGER DEFAULT 0,
-      is_member INTEGER DEFAULT 0,
-      member_expire_at DATETIME,
-      is_admin INTEGER DEFAULT 0,
-      is_banned INTEGER DEFAULT 0,
-      storage_used INTEGER DEFAULT 0,
-      storage_limit INTEGER DEFAULT 104857600,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `)
+  try {
+    console.log(`[DB] Initializing database at: ${dbPath}`)
 
-  // Migrate: add columns if not exists
-  migrateColumn('users', 'is_admin', 'INTEGER DEFAULT 0')
-  migrateColumn('users', 'is_banned', 'INTEGER DEFAULT 0')
-  migrateColumn('users', 'storage_used', 'INTEGER DEFAULT 0')
-  migrateColumn('users', 'storage_limit', 'INTEGER DEFAULT 104857600')
+    // Users table - with migration for new columns
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        nickname TEXT,
+        avatar TEXT,
+        credits INTEGER DEFAULT 0,
+        is_member INTEGER DEFAULT 0,
+        member_expire_at DATETIME,
+        is_admin INTEGER DEFAULT 0,
+        is_banned INTEGER DEFAULT 0,
+        storage_used INTEGER DEFAULT 0,
+        storage_limit INTEGER DEFAULT 104857600,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `)
 
-  // Migrate: add deleted_at to admin_accounts if not exists
-  migrateColumn('admin_accounts', 'deleted_at', 'DATETIME')
+    // Migrate: add columns if not exists
+    migrateColumn('users', 'is_admin', 'INTEGER DEFAULT 0')
+    migrateColumn('users', 'is_banned', 'INTEGER DEFAULT 0')
+    migrateColumn('users', 'storage_used', 'INTEGER DEFAULT 0')
+    migrateColumn('users', 'storage_limit', 'INTEGER DEFAULT 104857600')
 
-  db.exec(`
+    // Migrate: add deleted_at to admin_accounts if not exists
+    migrateColumn('admin_accounts', 'deleted_at', 'DATETIME')
+
+    db.exec(`
     CREATE TABLE IF NOT EXISTS works (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -415,7 +418,13 @@ export function initDB() {
       (3, 'DALL-E 3', 'OpenAI 官方模型', 'image', 'openai', 1500, 1),
       (4, 'Midjourney V6', '艺术风格出众', 'image', 'midjourney', 2000, 1),
       (5, 'Flux', '开源高质量模型', 'image', 'blackforest', 800, 1);
-  `)
+    `)
+
+    console.log('[DB] Database initialized successfully')
+  } catch (err) {
+    console.error('[DB] Failed to initialize database:', err)
+    throw err
+  }
 }
 
 export default db
