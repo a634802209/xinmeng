@@ -27,6 +27,16 @@ router.post('/create', authMiddleware, (req: AuthRequest, res: Response): void =
 })
 
 router.post('/callback', (req, res): void => {
+  // P0 修复：临时禁用不安全的支付回调，先注释掉，实际项目请配置签名验证
+  // 建议：
+  // 1. 添加支付平台签名验证（微信支付 RSA 验签/支付宝 RSA2 验签）
+  // 2. 添加 IP 白名单（仅允许支付平台服务器 IP）
+  // 3. 添加幂等性控制（用 orderNo 做唯一索引，避免重复处理）
+  // 4. 使用随机 UUID 订单号
+  error(res, 'Payment callback temporarily disabled for security fix', 503)
+  return
+  
+  /*
   const { orderNo, paymentMethod } = req.body
   if (!orderNo || typeof orderNo !== 'string' || orderNo.trim().length === 0) {
     error(res, 'Order number required', 400)
@@ -43,6 +53,7 @@ router.post('/callback', (req, res): void => {
   } catch (err) {
     error(res, err instanceof Error ? err.message : 'Payment failed', 400)
   }
+  */
 })
 
 router.get('/orders', authMiddleware, (req: AuthRequest, res: Response): void => {

@@ -9,6 +9,8 @@ import AdminDashboard from '@/pages/AdminDashboard'
 import AdminLogin from '@/pages/AdminLogin'
 import QuickCreate from '@/pages/QuickCreate'
 import HotkeyHelp from '@/components/HotkeyHelp'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { AdminRoute } from '@/components/AdminRoute'
 import { useUserSync } from '@/hooks/useUserSync'
 import { useHotkeys } from '@/hooks/useHotkeys'
 
@@ -43,13 +45,19 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/membership" element={<Membership />} />
-        <Route path="/canvas" element={<Canvas />} />
-        <Route path="/recharge" element={<Recharge />} />
-        <Route path="/credit-records" element={<CreditRecords />} />
-        <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin-login" element={<AdminLogin />} />
-        <Route path="/quick-create" element={<QuickCreate />} />
+        
+        {/* P1 修复：需要登录的路由 */}
+        <Route path="/membership" element={<ProtectedRoute><Membership /></ProtectedRoute>} />
+        <Route path="/canvas" element={<ProtectedRoute><Canvas /></ProtectedRoute>} />
+        <Route path="/recharge" element={<ProtectedRoute><Recharge /></ProtectedRoute>} />
+        <Route path="/credit-records" element={<ProtectedRoute><CreditRecords /></ProtectedRoute>} />
+        <Route path="/quick-create" element={<ProtectedRoute><QuickCreate /></ProtectedRoute>} />
+        
+        {/* P1 修复：需要管理员权限的路由 */}
+        <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+        
+        {/* 占位页面，后续可实现 */}
         <Route path="/api-docs" element={<Home />} />
         <Route path="/models" element={<Home />} />
         <Route path="/works" element={<Home />} />

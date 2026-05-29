@@ -106,10 +106,18 @@ export function createVideoTask(userId: number, params: VideoGenerateParams): Ge
   }
 }
 
-export function getTaskStatus(taskId: string) {
-  const task = db.prepare('SELECT * FROM generate_tasks WHERE id = ?').get(taskId) as
+export function getTaskStatus(taskId: string, userId?: number) {
+  // P1 修复：增加用户归属验证，防止 IDOR 越权访问
+  const sql = userId 
+    ? 'SELECT * FROM generate_tasks WHERE id = ? AND user_id = ?'
+    : 'SELECT * FROM generate_tasks WHERE id = ?'
+  
+  const params = userId ? [taskId, userId] : [taskId]
+  
+  const task = db.prepare(sql).get(...params) as
     | {
         id: string
+        user_id: number
         status: string
         progress: number
         result: string

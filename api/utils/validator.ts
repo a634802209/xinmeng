@@ -4,7 +4,7 @@ export const emailSchema = z.string().email('邮箱格式不正确')
 
 export const loginSchema = z.object({
   email: emailSchema,
-  code: z.string().min(6, '验证码至少6位').max(6, '验证码为6位'),
+  code: z.string().regex(/^\d{6}$/, '验证码必须是6位数字'),
 })
 
 export const imageGenerateSchema = z.object({

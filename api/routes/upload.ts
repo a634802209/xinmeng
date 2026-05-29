@@ -70,11 +70,12 @@ router.post('/work', authMiddleware, upload.single('file'), async (req: AuthRequ
 
     const workType = type || (req.file.mimetype.startsWith('video') ? 'video' : 'image')
 
+    // P0 修复：is_public 默认改为 0，由用户显式设置
     const result = db
       .prepare(
         'INSERT INTO works (user_id, type, prompt, result_url, thumbnail_url, status, is_public, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       )
-      .run(user.id, workType, prompt || '', fileUrl, fileUrl, 'completed', 1, category || null)
+      .run(user.id, workType, prompt || '', fileUrl, fileUrl, 'completed', 0, category || null)
 
     success(res, {
       work: {
@@ -93,13 +94,18 @@ router.post('/work', authMiddleware, upload.single('file'), async (req: AuthRequ
   }
 })
 
-router.get('/files', (_req, res: Response): void => {
+// P0 修复：添加认证，并且禁用该接口（避免敏感文件泄露）
+router.get('/files', authMiddleware, (_req: AuthRequest, res: Response): void => {
+  // 暂时禁用该接口，实际项目可改为只返回当前用户自己上传的文件
+  error(res, 'File list endpoint disabled for security', 403)
+  /*
   try {
     const files = fs.readdirSync(uploadDir)
     success(res, { files })
   } catch {
     error(res, 'Failed to read directory', 500)
   }
+  */
 })
 
 export default router

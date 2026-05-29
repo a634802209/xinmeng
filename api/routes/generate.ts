@@ -38,7 +38,8 @@ router.post('/video', authMiddleware, (req: AuthRequest, res: Response): void =>
 })
 
 router.get('/status/:id', authMiddleware, (req: AuthRequest, res: Response): void => {
-  const task = getTaskStatus(req.params.id)
+  // P1 修复：传递 userId 到 getTaskStatus，验证任务归属
+  const task = getTaskStatus(req.params.id, req.user?.id)
 
   if (!task) {
     error(res, 'Task not found', 404)
