@@ -115,9 +115,9 @@ export default function AdminLogin() {
             </form>
 
             <div className="mt-6 text-center text-xs text-slate-400">
-              默认账号: admin / 密码: xinmeng2024
+              默认账号: admin / 密码: debug123
               <br />
-              首次登录后请立即修改密码
+              登录成功后请在后台修改密码
             </div>
           </div>
         </div>

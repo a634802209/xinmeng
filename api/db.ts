@@ -393,9 +393,9 @@ export function initDB() {
     CREATE INDEX IF NOT EXISTS idx_admin_accounts_username ON admin_accounts(username);
 
     -- Insert default admin account (username: admin, password: xinmeng2024)
-    -- Password hash for 'xinmeng2024' using bcrypt
+    -- Password hash for 'xinmeng2024' using bcrypt (generated with bcrypt.hash('xinmeng2024', 10))
     INSERT OR IGNORE INTO admin_accounts (id, username, password_hash, role) VALUES
-      (1, 'admin', '$2a$10$N9qo8uLOickgx2ZMRZoMy.MqrqQzBZN0UfGNEsKYGs5qPRJ1y8.Vq', 'superadmin');
+      (1, 'admin', '$2b$10$UN3hzExPWcSY6cH.nhdeZ.BxtbqKSeD85qsZeK5fculltyGAUy1Dm', 'superadmin');
 
     INSERT OR IGNORE INTO settings (key, value) VALUES
       ('image_price', '1000'),
