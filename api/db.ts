@@ -383,16 +383,13 @@ export function initDB() {
 
     CREATE INDEX IF NOT EXISTS idx_admin_accounts_username ON admin_accounts(username);
 
-    -- Migrate: add deleted_at to admin_accounts if not exists (after table creation)
-    migrateColumn('admin_accounts', 'deleted_at', 'DATETIME')
-
     -- Insert default admin account (username: admin, password: xinmeng2024)
     -- Password hash for 'xinmeng2024' using bcrypt (generated with bcrypt.hash('xinmeng2024', 10))
     INSERT OR IGNORE INTO admin_accounts (id, username, password_hash, role) VALUES
-      (1, 'admin', '$2b$10$mfHBJNpbgcBQ2Yqsc/m6peOfBb6zjL4pXJQeiks1H.vxDzFXmNlIC', 'superadmin');
+      (1, 'admin', '$2b$10$1nwRnV1pgfB74ffzonh3Ke2xnYQqHmjUVYbZ4/UJH8u714HcgBrpq', 'superadmin');
 
     -- Update password hash if account exists but hash is wrong
-    UPDATE admin_accounts SET password_hash = '$2b$10$mfHBJNpbgcBQ2Yqsc/m6peOfBb6zjL4pXJQeiks1H.vxDzFXmNlIC' WHERE username = 'admin';
+    UPDATE admin_accounts SET password_hash = '$2b$10$1nwRnV1pgfB74ffzonh3Ke2xnYQqHmjUVYbZ4/UJH8u714HcgBrpq' WHERE username = 'admin';
 
     INSERT OR IGNORE INTO settings (key, value) VALUES
       ('image_price', '1000'),
@@ -419,6 +416,9 @@ export function initDB() {
       (4, 'Midjourney V6', '艺术风格出众', 'image', 'midjourney', 2000, 1),
       (5, 'Flux', '开源高质量模型', 'image', 'blackforest', 800, 1);
     `)
+
+    // Migrate: add deleted_at to admin_accounts if not exists (after table creation)
+    migrateColumn('admin_accounts', 'deleted_at', 'DATETIME')
 
     console.log('[DB] Database initialized successfully')
   } catch (err) {
