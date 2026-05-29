@@ -12,7 +12,17 @@ err()  { echo -e "${RED}[ERR]${NC} $1"; }
 
 log "=== XinMeng AI 完整部署 ==="
 
-[ "$EUID" -ne 0 ] && err "请用 root 执行" && exit 1
+# 检查用户权限 - ubuntu 用户需要 sudo
+SUDO=""
+if [ "$EUID" -ne 0 ]; then
+    if command -v sudo &>/dev/null; then
+        SUDO="sudo"
+        ok "使用 sudo 执行需要权限的操作"
+    else
+        err "需要 root 权限或 sudo，请安装 sudo: apt-get install sudo"
+        exit 1
+    fi
+fi
 
 # ---------- 1. 安装 Docker ----------
 if command -v docker &>/dev/null; then
@@ -20,14 +30,16 @@ if command -v docker &>/dev/null; then
 else
     log "安装 Docker..."
     curl -fsSL https://get.docker.com | sh
-    systemctl enable docker --now
-    ok "Docker 安装完成"
+    $SUDO systemctl enable docker --now
+    # 将当前用户加入 docker 组，免 sudo 使用
+    $SUDO usermod -aG docker $USER
+    ok "Docker 安装完成，已加入 docker 组（重新登录后免 sudo）"
 fi
 
 # ---------- 2. 安装 docker-compose（兼容插件和独立版）----------
 COMPOSE_CMD=""
-if docker compose version &>/dev/null; then
-    COMPOSE_CMD="docker compose"
+if $SUDO docker compose version &>/dev/null; then
+    COMPOSE_CMD="$SUDO docker compose"
     ok "docker compose 插件已安装"
 elif command -v docker-compose &>/dev/null; then
     COMPOSE_CMD="docker-compose"
@@ -35,21 +47,21 @@ elif command -v docker-compose &>/dev/null; then
 else
     log "安装 docker-compose..."
     ARCH=$(uname -m)
-    curl -sSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${ARCH}" \
+    $SUDO curl -sSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-${ARCH}" \
          -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
+    $SUDO chmod +x /usr/local/bin/docker-compose
     COMPOSE_CMD="docker-compose"
     ok "docker-compose 安装完成"
 fi
 
 # ---------- 3. 清理旧项目 ----------
-PROJECT_DIR="/opt/xinmeng-ai"
+PROJECT_DIR="$HOME/xinmeng-ai"
 if [ -d "$PROJECT_DIR" ]; then
     log "清理旧项目..."
     cd "$PROJECT_DIR"
     $COMPOSE_CMD -f docker-compose.prod.yml down --rmi all -v 2>/dev/null || true
-    docker rm -f xinmeng-ai 2>/dev/null || true
-    docker rmi -f xinmeng-ai:latest 2>/dev/null || true
+    $SUDO docker rm -f xinmeng-ai 2>/dev/null || true
+    $SUDO docker rmi -f xinmeng-ai:latest 2>/dev/null || true
     cd /
     rm -rf "$PROJECT_DIR"
     ok "旧项目已清理"
@@ -82,7 +94,7 @@ ok "环境变量已写入 .env"
 # ---------- 7. 构建并启动 ----------
 log "Docker 构建中（首次约 3-5 分钟）..."
 $COMPOSE_CMD -f docker-compose.prod.yml build --no-cache
-$COMPOSE_CMD -f docker-compose.prod.yml up -d
+$SUDO $COMPOSE_CMD -f docker-compose.prod.yml up -d
 
 # ---------- 8. 等待就绪 ----------
 log "等待服务就绪..."
