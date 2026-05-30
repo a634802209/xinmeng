@@ -21,7 +21,7 @@ fi
 cd "$(dirname "$0")"
 PROJECT_DIR="$(pwd)"
 
-# 生成随机密码
+# 生成随机密码（确保密码不为空）
 JWT_SECRET=$(openssl rand -hex 32)
 ADMIN_SECRET=$(openssl rand -hex 32)
 DB_PASSWORD=$(openssl rand -hex 16)
@@ -58,6 +58,11 @@ EOF
 
 echo "✅ .env 文件已创建"
 echo ""
+echo "📋 当前数据库配置："
+echo "   - DB_USER: xinmeng"
+echo "   - DB_PASSWORD: ${DB_PASSWORD}"
+echo "   - DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}"
+echo ""
 
 echo "🔧 检查并拉取最新代码..."
 if [ -d ".git" ]; then
@@ -66,7 +71,7 @@ fi
 
 echo ""
 echo "🐳 停止旧容器..."
-docker compose down 2>/dev/null || true
+docker compose down -v 2>/dev/null || true
 
 echo ""
 echo "📦 构建并启动服务..."
@@ -74,7 +79,7 @@ docker compose up -d --build
 
 echo ""
 echo "⏳ 等待服务启动（约30-60秒）..."
-sleep 10
+sleep 15
 
 echo ""
 echo "📊 检查容器状态："
@@ -88,8 +93,19 @@ echo ""
 echo "📋 常用命令："
 echo "  查看日志: docker compose logs -f"
 echo "  查看后端日志: docker compose logs -f xinmeng-ai-backend"
+echo "  查看MySQL日志: docker compose logs -f xinmeng-ai-mysql"
 echo "  重启服务: docker compose restart"
 echo "  停止服务: docker compose down"
 echo ""
 echo "🔑 数据库密码已保存到 .env 文件"
 echo ""
+
+# 提示测试连接
+echo "🔍 测试数据库连接..."
+sleep 5
+if docker compose exec -T xinmeng-ai-mysql mysql -u xinmeng -p${DB_PASSWORD} -e "SELECT 1" xinmeng &>/dev/null; then
+    echo "✅ MySQL 连接成功!"
+else
+    echo "❌ MySQL 连接失败，请检查日志"
+    docker compose logs --tail=20 xinmeng-ai-mysql
+fi

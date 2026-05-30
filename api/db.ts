@@ -2,9 +2,21 @@ import mysql, { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mys
 
 const DB_HOST = process.env.DB_HOST || 'localhost'
 const DB_PORT = parseInt(process.env.DB_PORT || '3306')
-const DB_USER = process.env.DB_USER || 'root'
-const DB_PASSWORD = process.env.DB_PASSWORD || ''
+const DB_USER = process.env.DB_USER
+const DB_PASSWORD = process.env.DB_PASSWORD
 const DB_NAME = process.env.DB_NAME || 'xinmeng'
+
+if (!DB_USER) {
+  throw new Error('[DB] DB_USER environment variable is required')
+}
+if (!DB_PASSWORD) {
+  throw new Error('[DB] DB_PASSWORD environment variable is required')
+}
+if (!DB_HOST) {
+  throw new Error('[DB] DB_HOST environment variable is required')
+}
+
+console.log(`[DB] Configuration: host=${DB_HOST}:${DB_PORT}, user=${DB_USER}, database=${DB_NAME}`)
 
 let pool: Pool | null = null
 

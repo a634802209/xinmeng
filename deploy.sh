@@ -130,6 +130,16 @@ for i in $(seq 1 60); do
     sleep 2
 done
 
+log "测试数据库用户连接..."
+sleep 3
+if $COMPOSE_CMD exec -T xinmeng-ai-mysql mysql -u xinmeng -p${DB_PASSWORD} -e "SELECT 1" xinmeng &>/dev/null; then
+    ok "数据库用户连接成功"
+else
+    err "数据库用户连接失败，检查密码配置"
+    $COMPOSE_CMD logs --tail=20 xinmeng-ai-mysql
+    exit 1
+fi
+
 log "等待服务就绪..."
 for i in $(seq 1 60); do
     if curl -sf http://localhost/health > /dev/null 2>&1; then
