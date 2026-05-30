@@ -85,8 +85,8 @@ export async function subscribeMembership(userId: number, planId: number) {
 }
 
 export async function getMembershipStatus(userId: number) {
-  const [rows] = await db.query<any[]>(
-    "SELECT * FROM memberships WHERE user_id = ? AND is_active = 1 AND expired_at > datetime('now') ORDER BY expired_at DESC LIMIT 1",
+  const rows = await db.query<any[]>(
+    "SELECT * FROM memberships WHERE user_id = ? AND is_active = 1 AND expired_at > NOW() ORDER BY expired_at DESC LIMIT 1",
     [userId]
   )
   const membership = rows[0]

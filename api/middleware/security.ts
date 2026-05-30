@@ -75,7 +75,7 @@ export async function securityMiddlewareWithChecks(req: SecurityRequest, res: Re
 
   const now = new Date().toISOString()
 
-  const [ipRows] = await db.query<any[]>(
+  const ipRows = await db.query<any[]>(
     `SELECT 1 FROM ip_blacklist WHERE ip = ? AND (expires_at IS NULL OR expires_at > ?)`,
     [clientIp, now]
   )
@@ -88,7 +88,7 @@ export async function securityMiddlewareWithChecks(req: SecurityRequest, res: Re
     return
   }
 
-  const [deviceRows] = await db.query<any[]>(
+  const deviceRows = await db.query<any[]>(
     `SELECT 1 FROM device_blacklist WHERE fingerprint = ? AND (expires_at IS NULL OR expires_at > ?)`,
     [fingerprint, now]
   )
@@ -101,12 +101,12 @@ export async function securityMiddlewareWithChecks(req: SecurityRequest, res: Re
     return
   }
 
-  const [attemptRows] = await db.query<any[]>(
-    `SELECT COUNT(*) as count FROM login_attempts WHERE ip = ? AND success = 0 AND created_at > datetime('now', '-30 minutes')`,
+  const attemptRows = await db.query<any[]>(
+    `SELECT COUNT(*) as count FROM login_attempts WHERE ip = ? AND success = 0 AND created_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)`,
     [clientIp]
   )
 
-  if (attemptRows[0].count >= 10) {
+  if (attemptRows.length > 0 && attemptRows[0].count >= 10) {
     req.isBlocked = true
     req.blockReason = 'BRUTE_FORCE'
     await logAccess(req, res, 429, 'TOO_MANY_FAILED_LOGINS')
@@ -168,12 +168,12 @@ export async function trackLoginAttempt(ip: string, email: string | null, finger
     )
 
     if (!success) {
-      const [rows] = await db.query<any[]>(
-        `SELECT COUNT(*) as count FROM login_attempts WHERE ip = ? AND success = 0 AND created_at > datetime('now', '-30 minutes')`,
+      const rows = await db.query<any[]>(
+        `SELECT COUNT(*) as count FROM login_attempts WHERE ip = ? AND success = 0 AND created_at > DATE_SUB(NOW(), INTERVAL 30 MINUTE)`,
         [ip]
       )
 
-      if (rows[0].count >= 10) {
+      if (rows.length > 0 && rows[0].count >= 10) {
         console.warn(`[Security] IP ${ip} has ${rows[0].count} failed login attempts. Consider blacklisting.`)
       }
     }

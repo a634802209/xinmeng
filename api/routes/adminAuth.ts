@@ -65,7 +65,7 @@ router.post('/login', async (req: AdminAuthRequest, res: Response): Promise<void
 
   const clientIp = getClientIp(req)
 
-  const [rows] = await db.query<any[]>('SELECT * FROM admin_accounts WHERE username = ?', [username])
+  const rows = await db.query<any[]>('SELECT * FROM admin_accounts WHERE username = ?', [username])
   const admin = rows[0]
 
   if (!admin) {
@@ -87,7 +87,7 @@ router.post('/login', async (req: AdminAuthRequest, res: Response): Promise<void
     return
   }
 
-  await db.execute("UPDATE admin_accounts SET last_login_at = datetime('now') WHERE id = ?", [admin.id])
+  await db.execute("UPDATE admin_accounts SET last_login_at = NOW() WHERE id = ?", [admin.id])
   await trackLoginAttempt(clientIp, username, null, true)
 
   const token = generateAdminToken({ id: admin.id, username: admin.username, role: admin.role })
@@ -134,7 +134,7 @@ router.post('/change-password', adminAuthMiddleware, async (req: AdminAuthReques
 
   const adminId = req.adminUser!.id
 
-  const [rows] = await db.query<any[]>('SELECT password_hash FROM admin_accounts WHERE id = ?', [adminId])
+  const rows = await db.query<any[]>('SELECT password_hash FROM admin_accounts WHERE id = ?', [adminId])
   const admin = rows[0]
 
   if (!admin) {
@@ -155,7 +155,7 @@ router.post('/change-password', adminAuthMiddleware, async (req: AdminAuthReques
 })
 
 router.get('/accounts', adminAuthMiddleware, requireSuperAdmin, async (req: AdminAuthRequest, res: Response): Promise<void> => {
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT id, username, role, is_active, last_login_at, created_at FROM admin_accounts ORDER BY id'
   )
 
@@ -225,7 +225,7 @@ router.delete('/accounts/:id', adminAuthMiddleware, requireSuperAdmin, async (re
     return
   }
 
-  await db.execute("UPDATE admin_accounts SET is_active = 0, deleted_at = datetime('now') WHERE id = ?", [id])
+  await db.execute("UPDATE admin_accounts SET is_active = 0, deleted_at = NOW() WHERE id = ?", [id])
   res.json({ success: true, message: 'Account soft deleted' })
 })
 

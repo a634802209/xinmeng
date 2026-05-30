@@ -168,7 +168,7 @@ export async function getTaskStatus(taskId: string, userId?: number) {
 
   const params = userId ? [taskId, userId] : [taskId]
 
-  const [rows] = await db.query<any[]>(sql, params)
+  const rows = await db.query<any[]>(sql, params)
   const task = rows[0]
 
   if (!task) return null
