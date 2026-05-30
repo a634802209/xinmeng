@@ -5,9 +5,13 @@ import { getUserByEmail, createUser } from '../services/userService.js'
 import { success, error } from '../utils/response.js'
 import { validate, loginSchema } from '../utils/validator.js'
 import { trackLoginAttempt } from '../middleware/security.js'
+import { sendVerificationCode, sendPasswordReset, isMailConfigured } from '../services/mailService.js'
 import db from '../db.js'
+import crypto from 'crypto'
 
 const router = Router()
+
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:4173'
 
 function getClientIp(req: Request): string {
   const forwarded = req.headers['x-forwarded-for']
@@ -36,7 +40,7 @@ function generateCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
-router.post('/send-code', (req: Request, res: Response): void => {
+router.post('/send-code', async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     error(res, 'Invalid email', 400)
@@ -51,7 +55,18 @@ router.post('/send-code', (req: Request, res: Response): void => {
   )
   stmt.run(email, code, expiresAt)
 
-  success(res, { message: 'Verification code sent' })
+  if (isMailConfigured()) {
+    try {
+      await sendVerificationCode(email, code)
+      success(res, { message: 'Verification code sent' })
+    } catch (err: any) {
+      console.error('[Mail] Failed to send verification code:', err)
+      error(res, 'Failed to send email', 500)
+    }
+  } else {
+    console.warn('[Mail] SMTP not configured, returning demo code')
+    success(res, { message: 'Verification code sent', demoCode: code })
+  }
 })
 
 router.post('/login', (req: Request, res: Response): void => {
@@ -107,7 +122,6 @@ router.post('/login', (req: Request, res: Response): void => {
 
   const token = generateToken({ id: user.id, email: user.email, nickname: user.nickname, avatar: user.avatar, isAdmin: user.isAdmin })
 
-  // 低危修复：邮箱脱敏
   const maskedEmail = maskEmail(user.email)
 
   success(res, {
@@ -132,7 +146,6 @@ router.get('/me', authMiddleware, (req: AuthRequest, res: Response): void => {
     return
   }
 
-  // 低危修复：邮箱脱敏
   const maskedEmail = maskEmail(user.email)
 
   success(res, {
@@ -148,13 +161,77 @@ router.get('/me', authMiddleware, (req: AuthRequest, res: Response): void => {
   })
 })
 
+// ===== 密码找回功能 =====
+
+router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    error(res, 'Invalid email', 400)
+    return
+  }
+
+  const user = getUserByEmail(email)
+  if (!user) {
+    error(res, 'Email not registered', 404)
+    return
+  }
+
+  if (!isMailConfigured()) {
+    error(res, 'Email service not configured', 503)
+    return
+  }
+
+  const resetToken = crypto.randomBytes(32).toString('hex')
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+
+  db.prepare(
+    'INSERT OR REPLACE INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)'
+  ).run(email, resetToken, expiresAt)
+
+  const resetUrl = `${FRONTEND_URL}/reset-password`
+
+  try {
+    await sendPasswordReset(email, resetToken, resetUrl)
+    success(res, { message: 'Password reset email sent' })
+  } catch (err: any) {
+    console.error('[Mail] Failed to send password reset:', err)
+    error(res, 'Failed to send email', 500)
+  }
+})
+
+router.post('/reset-password', (req: Request, res: Response): void => {
+  const { token, newPassword } = req.body
+  if (!token || !newPassword || newPassword.length < 6) {
+    error(res, 'Invalid token or password too short', 400)
+    return
+  }
+
+  const record = db.prepare('SELECT * FROM password_resets WHERE token = ?').get(token) as
+    | { email: string; expires_at: string }
+    | undefined
+
+  if (!record) {
+    error(res, 'Invalid or expired token', 400)
+    return
+  }
+
+  if (new Date(record.expires_at) < new Date()) {
+    error(res, 'Token expired', 400)
+    return
+  }
+
+  db.prepare('UPDATE users SET password_hash = ? WHERE email = ?').run(newPassword, record.email)
+  db.prepare('DELETE FROM password_resets WHERE token = ?').run(token)
+
+  success(res, { message: 'Password reset successfully' })
+})
+
 function getUserById(userId: number) {
   return getUserByEmail(
     (db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string } | undefined)?.email || ''
   )
 }
 
-// 低危修复：邮箱脱敏函数 a***@example.com
 function maskEmail(email: string): string {
   const [local, domain] = email.split('@')
   if (!local || !domain) return email
