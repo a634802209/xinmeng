@@ -10,6 +10,7 @@ services:
     ports:
       - "127.0.0.1:3001:3001"
     volumes:
+      # Only mount data directories, NOT the source code
       - ./data:/app/data
       - ./public/uploads:/app/public/uploads
       - ./logs:/app/logs
