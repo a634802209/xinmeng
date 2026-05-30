@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # 前端 - Nginx
+  xinmeng-ai-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: xinmeng-ai-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - xinmeng-ai-backend
+    networks:
+      - xinmeng-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 后端 - Node.js
+  xinmeng-ai-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: xinmeng-ai-backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_JWT_SECRET=${ADMIN_JWT_SECRET}
+      - FRONTEND_URL=http://${HOST_IP:-localhost}
+      - DB_HOST=xinmeng-ai-mysql
+      - DB_PORT=3306
+      - DB_USER=xinmeng
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=xinmeng
+      - REDIS_HOST=xinmeng-ai-redis
+      - REDIS_PORT=6379
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - SITE_NAME=${SITE_NAME}
+    depends_on:
+      - xinmeng-ai-mysql
+      - xinmeng-ai-redis
+    networks:
+      - xinmeng-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 数据库 - MySQL
+  xinmeng-ai-mysql:
+    image: mysql:8.0
+    container_name: xinmeng-ai-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=xinmeng
+      - MYSQL_USER=xinmeng
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./api/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - xinmeng-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "xinmeng", "-p${DB_PASSWORD}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 缓存 - Redis
+  xinmeng-ai-redis:
+    image: redis:7-alpine
+    container_name: xinmeng-ai-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks:
+      - xinmeng-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mysql-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  xinmeng-network:
+    driver: bridge
