@@ -5,7 +5,7 @@ const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587')
 const SMTP_USER = process.env.SMTP_USER
 const SMTP_PASS = process.env.SMTP_PASS
 const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER
-const SITE_NAME = process.env.SITE_NAME || '新梦AI'
+const SITE_NAME = process.env.SITE_NAME || 'XinMeng.ai'
 
 let transporter: nodemailer.Transporter | null = null
 
