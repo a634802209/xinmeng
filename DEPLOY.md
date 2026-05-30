@@ -2,7 +2,8 @@
 
 ## 📋 目录
 - [环境准备](#环境准备)
-- [快速部署](#快速部署)
+- [GitHub SSH Key 配置](#github-ssh-key-配置)
+- [快速部署（GitHub SSH 克隆）](#快速部署github-ssh-克隆)
 - [域名与 HTTPS](#域名与-https)
 - [后续维护](#后续维护)
 - [常见问题](#常见问题)
@@ -38,57 +39,81 @@ ssh root@您的服务器IP
 
 ---
 
-## 🚀 快速部署
+## 🔑 GitHub SSH Key 配置
 
-### 方法一：使用部署包（推荐）
+**重要：推荐使用 SSH 方式克隆代码，这样可以方便后续更新部署**
 
-#### 步骤 1：在本地打包项目
-
-在您的本地开发环境中：
+### 在服务器上生成 SSH Key
 
 ```bash
-# 进入项目目录
-cd /path/to/xinmeng-ai
+# 生成 SSH Key（如果还没有）
+ssh-keygen -t ed25519 -C "您的邮箱@example.com"
 
-# 运行打包脚本
-chmod +x package-deploy.sh
-./package-deploy.sh
+# 查看公钥
+cat ~/.ssh/id_ed25519.pub
 ```
 
-这会生成 `deploy.tar.gz` 部署包。
+### 将公钥添加到 GitHub
 
-#### 步骤 2：上传部署包到服务器
+1. 登录 GitHub：https://github.com
+2. 进入 Settings → SSH and GPG keys
+3. 点击 "New SSH key"
+4. 粘贴公钥内容
+5. 点击 "Add SSH key"
+
+### 验证 SSH 连接
 
 ```bash
-# 使用 scp 上传（在本地终端执行）
-scp deploy.tar.gz root@您的服务器IP:/tmp/
+ssh -T git@github.com
 ```
 
-#### 步骤 3：在服务器上部署
+看到 "Hi a634802209! You've successfully authenticated" 就表示配置成功。
 
-连接到服务器后执行：
+---
+
+## 🚀 快速部署（GitHub SSH 克隆）
+
+### 方法一：直接从 GitHub 克隆（推荐）
+
+#### 步骤 1：配置 SSH Key（如果未配置）
+
+按照上面的说明配置 GitHub SSH Key。
+
+#### 步骤 2：连接服务器并运行部署脚本
 
 ```bash
-# 创建项目目录
+# SSH 连接到服务器
+ssh root@您的服务器IP
+
+# 下载并运行部署脚本
 cd /opt
-mkdir -p xinmeng-ai
-cd xinmeng-ai
-
-# 解压部署包
-tar -xzf /tmp/deploy.tar.gz
-
-# 运行部署脚本
+curl -fsSL https://raw.githubusercontent.com/a634802209/xinmeng/main/deploy.sh -o deploy.sh
 chmod +x deploy.sh
 ./deploy.sh
 ```
 
-部署脚本会自动：
-- 安装 Docker 和 Docker Compose
-- 配置环境变量（自动生成密钥）
-- 构建并启动所有容器
-- 等待服务就绪
+#### 步骤 3：选择部署方式
 
-#### 步骤 4：访问应用
+运行脚本时会提示选择代码获取方式：
+
+```
+选择代码获取方式：
+1) 从 GitHub 克隆（推荐）- 需要配置 GitHub SSH Key  ← 选择这个
+2) 使用本地部署包 /opt/deploy.tar.gz
+3) 使用当前目录（如果已有项目文件）
+```
+
+#### 步骤 4：等待部署完成
+
+脚本会自动：
+- ✅ 安装 Docker 和 Docker Compose（如未安装）
+- ✅ 自动检测 SSH Key 并选择克隆方式
+- ✅ 从 GitHub 克隆代码到 `/opt/xinmeng-ai`
+- ✅ 配置环境变量（自动生成密钥）
+- ✅ 构建并启动所有容器
+- ✅ 等待服务就绪
+
+#### 步骤 5：访问应用
 
 部署完成后，在浏览器访问：
 ```
@@ -101,69 +126,52 @@ http://您的服务器IP
 
 ---
 
-### 方法二：手动部署
+### 方法二：手动 GitHub 克隆
 
-如果您想手动控制每个步骤：
+如果您想手动控制部署过程：
 
-#### 1. 安装 Docker
+#### 1. 安装必要软件
 
 ```bash
 # 安装 Docker
 curl -fsSL https://get.docker.com | sh
-
-# 启动 Docker
 systemctl enable docker --now
 
-# 验证安装
-docker --version
-docker compose version
+# 安装 Git
+apt-get update && apt-get install -y git
 ```
 
-#### 2. 上传项目文件
-
-将整个项目上传到服务器的 `/opt/xinmeng-ai` 目录。
-
-#### 3. 配置环境变量
+#### 2. 配置 GitHub SSH Key
 
 ```bash
-cd /opt/xinmeng-ai
-cp .env.example .env
+# 生成 SSH Key
+ssh-keygen -t ed25519 -C "your_email@example.com"
 
-# 编辑 .env 文件，设置以下内容：
+# 添加到 GitHub（如上所述）
+cat ~/.ssh/id_ed25519.pub
+```
+
+#### 3. 克隆代码
+
+```bash
+cd /opt
+git clone git@github.com:a634802209/xinmeng.git xinmeng-ai
+cd xinmeng-ai
+```
+
+#### 4. 配置环境变量
+
+```bash
+cp .env.example .env
 nano .env
 ```
 
-需要配置的关键项：
-```env
-# 基础配置
-NODE_ENV=production
-HOST_IP=您的服务器IP
-FRONTEND_URL=http://您的服务器IP
+编辑 `.env` 文件，配置必要的环境变量。
 
-# JWT 密钥（请使用随机字符串）
-JWT_SECRET=您的JWT密钥
-ADMIN_JWT_SECRET=您的管理员JWT密钥
-
-# 数据库配置（会自动创建，密码请随机生成）
-DB_PASSWORD=随机数据库密码
-DB_ROOT_PASSWORD=随机root密码
-
-# 邮箱配置（可选，用于发送验证码）
-SMTP_HOST=smtp.qq.com
-SMTP_PORT=587
-SMTP_USER=您的邮箱@qq.com
-SMTP_PASS=您的SMTP授权码
-SMTP_FROM=您的邮箱@qq.com
-```
-
-#### 4. 启动服务
+#### 5. 启动服务
 
 ```bash
-cd /opt/xinmeng-ai
 docker compose up -d --build
-
-# 查看日志
-docker compose logs -f
 ```
 
 ---
@@ -172,7 +180,7 @@ docker compose logs -f
 
 ### 1. 配置域名
 
-1. 在您的域名服务商处（如腾讯云 DNSPod）添加 DNS 解析：
+1. 在您的域名服务商处添加 DNS 解析：
    - 记录类型: `A`
    - 主机记录: `@` 或 `www`
    - 记录值: 您的服务器IP
@@ -194,43 +202,35 @@ server {
 
 重启前端容器：
 ```bash
+cd /opt/xinmeng-ai
 docker compose restart xinmeng-ai-frontend
 ```
 
 ### 3. 申请免费 SSL 证书（Let's Encrypt）
-
-使用 Certbot 申请证书：
 
 ```bash
 # 安装 Certbot
 apt-get update
 apt-get install -y certbot python3-certbot-nginx
 
-# 申请证书（会自动配置 Nginx）
+# 申请证书
 certbot --nginx -d 您的域名.com -d www.您的域名.com
 ```
 
-按提示操作，Certbot 会自动：
-- 验证域名所有权
-- 申请 SSL 证书
-- 配置 Nginx HTTPS
-- 设置自动续期
-
 ### 4. 更新环境变量
 
-修改 `.env` 文件：
-```env
-FRONTEND_URL=https://您的域名.com
-```
-
-重启后端服务：
 ```bash
+# 修改 .env 文件
+nano /opt/xinmeng-ai/.env
+# FRONTEND_URL=https://您的域名.com
+
+# 重启后端
 docker compose restart xinmeng-ai-backend
 ```
 
 ---
 
-## 🔧 后续维护
+## 🔄 后续维护
 
 ### 查看服务状态
 
@@ -240,12 +240,25 @@ cd /opt/xinmeng-ai
 # 查看容器状态
 docker compose ps
 
-# 查看所有容器日志
+# 查看所有日志
 docker compose logs -f
 
-# 查看特定容器日志
+# 查看特定容器
 docker compose logs -f xinmeng-ai-backend
-docker compose logs -f xinmeng-ai-mysql
+```
+
+### 更新代码
+
+**重要：使用 SSH 克隆后，更新非常简单！**
+
+```bash
+cd /opt/xinmeng-ai
+
+# 拉取最新代码（自动使用 SSH）
+git pull
+
+# 重新构建并启动
+docker compose up -d --build
 ```
 
 ### 停止与启动
@@ -261,28 +274,14 @@ docker compose up -d
 docker compose restart
 ```
 
-### 更新代码
-
-```bash
-cd /opt/xinmeng-ai
-
-# 1. 备份数据（可选但推荐）
-docker compose exec xinmeng-ai-mysql mysqldump -u xinmeng -p xinmeng > backup.sql
-
-# 2. 上传新的代码文件
-
-# 3. 重新构建并启动
-docker compose up -d --build
-```
-
 ### 数据库备份
 
 ```bash
-# 备份数据库
+# 备份
 cd /opt/xinmeng-ai
 docker compose exec xinmeng-ai-mysql mysqldump -u xinmeng -p xinmeng > backup_$(date +%Y%m%d).sql
 
-# 恢复数据库
+# 恢复
 docker compose exec -T xinmeng-ai-mysql mysql -u xinmeng -p xinmeng < backup.sql
 ```
 
@@ -313,18 +312,34 @@ docker compose exec -T xinmeng-ai-mysql mysql -u xinmeng -p xinmeng < backup.sql
 └──────────────┘   └──────────────┘
 ```
 
-### 容器说明
-
-| 容器名 | 镜像 | 作用 | 端口 |
-|--------|------|------|------|
-| xinmeng-ai-frontend | nginx:alpine | 前端 Web 服务 | 80 |
-| xinmeng-ai-backend | node:20-bookworm | 后端 API 服务 | 3001（内部） |
-| xinmeng-ai-mysql | mysql:8.0 | 数据库 | 3306（内部） |
-| xinmeng-ai-redis | redis:7-alpine | 缓存服务 | 6379（内部） |
-
 ---
 
 ## ❓ 常见问题
+
+### Q: GitHub SSH 克隆失败？
+
+检查清单：
+1. 是否已生成 SSH Key？
+   ```bash
+   ls -la ~/.ssh/
+   ```
+
+2. 是否已将公钥添加到 GitHub？
+   ```bash
+   cat ~/.ssh/id_ed25519.pub
+   # 检查是否在 GitHub Settings → SSH keys 中
+   ```
+
+3. 测试 SSH 连接：
+   ```bash
+   ssh -T git@github.com
+   ```
+
+4. 如果是私钥问题，检查权限：
+   ```bash
+   chmod 600 ~/.ssh/id_ed25519
+   chmod 700 ~/.ssh
+   ```
 
 ### Q: 部署后无法访问？
 
@@ -333,19 +348,12 @@ docker compose exec -T xinmeng-ai-mysql mysql -u xinmeng -p xinmeng < backup.sql
 2. 容器是否正常运行: `docker compose ps`
 3. 查看日志: `docker compose logs`
 
-### Q: MySQL 容器启动失败？
-
-检查：
-1. 服务器内存是否足够（至少 2GB）
-2. 查看日志: `docker compose logs xinmeng-ai-mysql`
-
 ### Q: 如何修改管理员密码？
 
 ```bash
-# 进入数据库
 docker compose exec xinmeng-ai-mysql mysql -u xinmeng -p xinmeng
 
-# 执行 SQL 更新密码（需要先生成 bcrypt 哈希）
+# 在 MySQL 中执行（需要 bcrypt 哈希）
 UPDATE admin_accounts SET password_hash='新的哈希值' WHERE username='admin';
 ```
 
@@ -357,23 +365,26 @@ TENCENT_COS_SECRET_ID=您的SecretId
 TENCENT_COS_SECRET_KEY=您的SecretKey
 TENCENT_COS_BUCKET=您的Bucket名称
 TENCENT_COS_REGION=ap-guangzhou
-TENCENT_COS_DOMAIN=您的COS域名
 ```
 
-### Q: 如何查看容器资源使用情况？
+### Q: Docker 构建失败？
 
+清理后重新构建：
 ```bash
-docker stats
+cd /opt/xinmeng-ai
+docker compose down
+docker system prune -a
+docker compose up -d --build
 ```
 
 ---
 
-## 📞 技术支持
+## 💡 提示
 
-如遇问题，请：
-1. 查看容器日志: `docker compose logs`
-2. 检查服务器资源: `htop`, `df -h`
-3. 确认防火墙/安全组配置
+1. **推荐使用 SSH 克隆**：配置一次，后续更新只需执行 `git pull`
+2. **定期备份数据**：尤其是数据库数据
+3. **查看日志排查问题**：大多数问题可以通过日志定位
+4. **保持系统更新**：定期更新 Docker 和系统包
 
 ---
 

@@ -14,6 +14,10 @@ err()  { echo -e "${RED}[ERR]${NC} $1"; }
 
 log "=== 新梦AI 腾讯云部署脚本 ==="
 
+# GitHub 配置
+GITHUB_REPO="https://github.com/a634802209/xinmeng.git"
+GITHUB_BRANCH="main"
+
 # 检查是否为 root 或 sudo
 SUDO=""
 if [ "$EUID" -ne 0 ]; then
@@ -67,11 +71,26 @@ fi
 # 项目目录
 PROJECT_DIR="/opt/xinmeng-ai"
 
-# 如果是在项目目录中直接运行，则不克隆
-if [ -f "docker-compose.yml" ] && [ -f "package.json" ]; then
-    log "检测到当前目录已包含项目文件，使用当前目录"
-    PROJECT_DIR=$(pwd)
-else
+# 选择部署方式
+echo ""
+log "选择代码获取方式："
+echo "1) 从 GitHub 克隆（推荐）- 需要配置 GitHub SSH Key"
+echo "2) 使用本地部署包 /opt/deploy.tar.gz"
+echo "3) 使用当前目录（如果已有项目文件）"
+echo ""
+read -p "请选择 (1/2/3, 默认 1): " DEPLOY_METHOD
+DEPLOY_METHOD=${DEPLOY_METHOD:-1}
+
+if [ "$DEPLOY_METHOD" = "1" ]; then
+    # 方式 1: 从 GitHub 克隆
+    log "从 GitHub 克隆代码..."
+    
+    # 安装 git（如果未安装）
+    if ! command -v git &>/dev/null; then
+        log "安装 Git..."
+        $SUDO apt-get update && $SUDO apt-get install -y git
+    fi
+    
     if [ -d "$PROJECT_DIR" ]; then
         log "清理旧项目..."
         cd "$PROJECT_DIR"
@@ -80,28 +99,61 @@ else
         rm -rf "$PROJECT_DIR"
         ok "旧项目已清理"
     fi
-
-    log "准备部署目录..."
+    
     mkdir -p "$PROJECT_DIR"
     cd "$PROJECT_DIR"
-
-    # 如果本地有 deploy.tar.gz 则使用，否则需要手动上传
-    if [ -f "/tmp/deploy.tar.gz" ]; then
-        log "使用本地部署包..."
-        tar -xzf /tmp/deploy.tar.gz -C "$PROJECT_DIR"
+    
+    # 尝试使用 SSH 克隆（如果已配置 SSH key）
+    if [ -f "$HOME/.ssh/id_rsa" ] || [ -f "$HOME/.ssh/id_ed25519" ]; then
+        log "检测到 SSH key，使用 SSH 克隆..."
+        GIT_REPO="git@github.com:a634802209/xinmeng.git"
     else
-        warn "未找到部署包，请确保已上传项目文件到 $PROJECT_DIR"
-        warn "或者按 Ctrl+C 退出，手动上传项目后重新运行此脚本"
-        warn ""
-        warn "如果已上传项目文件到当前目录，请确认继续..."
-        read -p "继续部署？(y/n): " confirm
-        if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-            exit 1
-        fi
+        log "未检测到 SSH key，使用 HTTPS 克隆..."
+        echo ""
+        warn "提示：建议先配置 GitHub SSH Key 以便后续更新部署"
+        echo "配置指南：https://github.com/settings/keys"
+        echo ""
+        GIT_REPO="$GITHUB_REPO"
+    fi
+    
+    log "克隆仓库: $GIT_REPO (branch: $GITHUB_BRANCH)"
+    git clone -b "$GITHUB_BRANCH" "$GIT_REPO" "$PROJECT_DIR"
+    ok "代码克隆完成"
+    
+elif [ "$DEPLOY_METHOD" = "2" ]; then
+    # 方式 2: 使用本地部署包
+    log "使用本地部署包..."
+    
+    if [ ! -f "/opt/deploy.tar.gz" ]; then
+        err "未找到 /opt/deploy.tar.gz，请先上传部署包"
+        exit 1
+    fi
+    
+    if [ -d "$PROJECT_DIR" ]; then
+        log "清理旧项目..."
+        cd "$PROJECT_DIR"
+        $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
+        cd /
+        rm -rf "$PROJECT_DIR"
+    fi
+    
+    mkdir -p "$PROJECT_DIR"
+    tar -xzf /opt/deploy.tar.gz -C "$PROJECT_DIR"
+    ok "部署包解压完成"
+    
+else
+    # 方式 3: 使用当前目录
+    if [ -f "docker-compose.yml" ] && [ -f "package.json" ]; then
+        log "检测到当前目录已包含项目文件"
+        PROJECT_DIR=$(pwd)
+    else
+        err "当前目录不是项目目录，请上传项目文件或选择其他部署方式"
+        exit 1
     fi
 fi
 
 cd "$PROJECT_DIR"
+ok "工作目录: $PROJECT_DIR"
 
 # 生成密钥
 JWT_SECRET=$(openssl rand -hex 32)
@@ -243,6 +295,7 @@ echo "🛠️  常用命令："
 echo "   查看日志:   cd $PROJECT_DIR && $COMPOSE_CMD logs -f"
 echo "   重启服务:   cd $PROJECT_DIR && $COMPOSE_CMD restart"
 echo "   停止服务:   cd $PROJECT_DIR && $COMPOSE_CMD down"
+echo "   更新代码:   cd $PROJECT_DIR && git pull && $COMPOSE_CMD up -d --build"
 echo "   进入数据库: cd $PROJECT_DIR && $COMPOSE_CMD exec xinmeng-ai-mysql mysql -u xinmeng -p${DB_PASSWORD} xinmeng"
 echo ""
 echo "💾 数据持久化位置："
