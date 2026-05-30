@@ -96,6 +96,7 @@ export async function initDB(): Promise<void> {
         is_banned INT DEFAULT 0,
         storage_used INT DEFAULT 0,
         storage_limit INT DEFAULT 104857600,
+        password_hash VARCHAR(255),
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)

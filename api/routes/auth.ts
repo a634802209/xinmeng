@@ -51,8 +51,8 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
 
   await db.execute(
-    'INSERT OR REPLACE INTO verify_codes (email, code, expires_at) VALUES (?, ?, ?)',
-    [email, code, expiresAt]
+    'INSERT INTO verify_codes (email, code, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE code = ?, expires_at = ?',
+    [email, code, expiresAt, code, expiresAt]
   )
 
   if (isMailConfigured()) {
@@ -82,7 +82,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
   const { email, code } = validation.data
 
-  const [rows] = await db.query<any[]>('SELECT * FROM verify_codes WHERE email = ?', [email])
+  const rows = await db.query<any[]>('SELECT * FROM verify_codes WHERE email = ?', [email])
   const record = rows[0]
 
   if (!record) {
@@ -182,8 +182,8 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
 
   await db.execute(
-    'INSERT OR REPLACE INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)',
-    [email, resetToken, expiresAt]
+    'INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE token = ?, expires_at = ?',
+    [email, resetToken, expiresAt, resetToken, expiresAt]
   )
 
   const resetUrl = `${FRONTEND_URL}/reset-password`
@@ -204,7 +204,7 @@ router.post('/reset-password', async (req: Request, res: Response): Promise<void
     return
   }
 
-  const [rows] = await db.query<any[]>('SELECT * FROM password_resets WHERE token = ?', [token])
+  const rows = await db.query<any[]>('SELECT * FROM password_resets WHERE token = ?', [token])
   const record = rows[0]
 
   if (!record) {

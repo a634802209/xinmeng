@@ -71,6 +71,20 @@ ADMIN_SECRET=$(openssl rand -hex 32)
 DB_PASSWORD=$(openssl rand -hex 16)
 DB_ROOT_PASSWORD=$(openssl rand -hex 16)
 
+log "配置 SMTP 邮箱服务..."
+echo "请输入 SMTP 配置信息（直接回车跳过配置）："
+read -p "SMTP 服务器地址 (默认 smtp.qq.com): " SMTP_HOST
+read -p "SMTP 端口 (默认 587): " SMTP_PORT
+read -p "SMTP 用户名 (邮箱地址): " SMTP_USER
+read -s -p "SMTP 授权码/密码: " SMTP_PASS
+echo
+read -p "发件人名称 (默认 新梦AI): " SMTP_FROM_NAME
+
+SMTP_HOST=${SMTP_HOST:-smtp.qq.com}
+SMTP_PORT=${SMTP_PORT:-587}
+SMTP_FROM_NAME=${SMTP_FROM_NAME:-新梦AI}
+SMTP_FROM=${SMTP_USER:-noreply@xinmeng.ai}
+
 cat > .env << EOF
 NODE_ENV=production
 PORT=3001
@@ -91,11 +105,11 @@ REDIS_PORT=6379
 
 FRONTEND_URL=http://129.204.225.231
 
-SMTP_HOST=smtp.qq.com
-SMTP_PORT=587
-SMTP_USER=your-email@qq.com
-SMTP_PASS=your-smtp-auth-code
-SMTP_FROM=noreply@xinmeng.ai
+SMTP_HOST=${SMTP_HOST}
+SMTP_PORT=${SMTP_PORT}
+SMTP_USER=${SMTP_USER}
+SMTP_PASS=${SMTP_PASS}
+SMTP_FROM=${SMTP_FROM}
 SITE_NAME=新梦AI
 EOF
 ok "环境变量已写入 .env"
