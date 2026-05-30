@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import db from '../db.js'
-import { adminMiddleware, type AdminRequest } from '../middleware/admin.js'
+import { adminAuthMiddleware, type AdminAuthRequest } from '../middleware/adminAuth.js'
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 
 const router = Router()
@@ -9,7 +9,7 @@ const router = Router()
 // ===== API 渠道管理 =====
 
 // 获取所有渠道
-router.get('/', adminMiddleware, (req: AdminRequest, res: Response): void => {
+router.get('/', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): void => {
   const channels = db.prepare(
     'SELECT id, name, type, base_url, model, priority, is_active, weight, success_count, fail_count, last_used_at, created_at FROM api_channels ORDER BY priority DESC, created_at ASC'
   ).all() as Array<{
@@ -37,7 +37,7 @@ router.get('/', adminMiddleware, (req: AdminRequest, res: Response): void => {
 })
 
 // 获取单个渠道详情（隐藏 api_key）
-router.get('/:id', adminMiddleware, (req: AdminRequest, res: Response): void => {
+router.get('/:id', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): void => {
   const channel = db.prepare('SELECT id, name, type, base_url, model, priority, is_active, weight, success_count, fail_count, last_used_at, created_at FROM api_channels WHERE id = ?').get(req.params.id) as
     | {
         id: number
@@ -71,7 +71,7 @@ router.get('/:id', adminMiddleware, (req: AdminRequest, res: Response): void => 
 })
 
 // 创建渠道
-router.post('/', adminMiddleware, (req: AdminRequest, res: Response): void => {
+router.post('/', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): void => {
   const { name, type, base_url, api_key, model, priority, weight } = req.body
 
   if (!name || !type || !base_url || !api_key) {
@@ -84,14 +84,14 @@ router.post('/', adminMiddleware, (req: AdminRequest, res: Response): void => {
   ).run(name, type, base_url, api_key, model || null, priority || 0, weight || 100)
 
   db.prepare('INSERT INTO admin_logs (admin_id, action, target_type, target_id, detail) VALUES (?, ?, ?, ?, ?)').run(
-    req.admin!.id, 'create_channel', 'channel', result.lastInsertRowid, JSON.stringify({ name, type })
+    req.adminUser!.id, 'create_channel', 'channel', result.lastInsertRowid, JSON.stringify({ name, type })
   )
 
   res.json({ success: true, data: { id: result.lastInsertRowid } })
 })
 
 // 更新渠道
-router.put('/:id', adminMiddleware, (req: AdminRequest, res: Response): void => {
+router.put('/:id', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): void => {
   const channelId = parseInt(req.params.id)
   const { name, type, base_url, api_key, model, priority, weight, is_active } = req.body
 
@@ -122,14 +122,14 @@ router.put('/:id', adminMiddleware, (req: AdminRequest, res: Response): void => 
   db.prepare(`UPDATE api_channels SET ${fields.join(', ')} WHERE id = ?`).run(...values)
 
   db.prepare('INSERT INTO admin_logs (admin_id, action, target_type, target_id, detail) VALUES (?, ?, ?, ?, ?)').run(
-    req.admin!.id, 'update_channel', 'channel', channelId, JSON.stringify(req.body)
+    req.adminUser!.id, 'update_channel', 'channel', channelId, JSON.stringify(req.body)
   )
 
   res.json({ success: true })
 })
 
 // 删除渠道
-router.delete('/:id', adminMiddleware, (req: AdminRequest, res: Response): void => {
+router.delete('/:id', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): void => {
   const channelId = parseInt(req.params.id)
 
   const channel = db.prepare('SELECT id FROM api_channels WHERE id = ?').get(channelId) as { id: number } | undefined
@@ -141,14 +141,14 @@ router.delete('/:id', adminMiddleware, (req: AdminRequest, res: Response): void 
   db.prepare('DELETE FROM api_channels WHERE id = ?').run(channelId)
 
   db.prepare('INSERT INTO admin_logs (admin_id, action, target_type, target_id, detail) VALUES (?, ?, ?, ?, ?)').run(
-    req.admin!.id, 'delete_channel', 'channel', channelId, ''
+    req.adminUser!.id, 'delete_channel', 'channel', channelId, ''
   )
 
   res.json({ success: true })
 })
 
 // 测试渠道连通性
-router.post('/:id/test', adminMiddleware, async (req: AdminRequest, res: Response): Promise<void> => {
+router.post('/:id/test', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const channelId = parseInt(req.params.id)
 
   const channel = db.prepare('SELECT * FROM api_channels WHERE id = ?').get(channelId) as
