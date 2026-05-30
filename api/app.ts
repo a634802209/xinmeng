@@ -69,7 +69,7 @@ const generalLimiter = rateLimit({
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: '请求过于频繁，请稍后再试' },
+  message: { code: 429, msg: '请求过于频繁，请稍后再试', data: null },
 })
 app.use('/api/', generalLimiter)
 
@@ -78,7 +78,7 @@ const codeLimiter = rateLimit({
   max: 3,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: '验证码发送过于频繁，请稍后再试' },
+  message: { code: 429, msg: '验证码发送过于频繁，请稍后再试', data: null },
 })
 app.use('/api/auth/send-code', codeLimiter)
 
@@ -87,7 +87,7 @@ const generateLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: '生成请求过于频繁，请稍后再试' },
+  message: { code: 429, msg: '生成请求过于频繁，请稍后再试', data: null },
 })
 app.use('/api/generate/', generateLimiter)
 
@@ -129,7 +129,7 @@ app.use('/api/community', communityRoutes)
 app.use('/api/upload', uploadRoutes)
 
 app.use('/api/health', (_req, res) => {
-  res.status(200).json({ success: true, message: 'ok' })
+  res.status(200).json({ code: 0, msg: 'ok', data: null })
 })
 
 const distPath = path.join(__dirname, '../dist')
@@ -145,8 +145,9 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
   console.error(`[Server Error]`, error)
   const isDev = process.env.NODE_ENV === 'development'
   res.status(500).json({
-    success: false,
-    error: isDev ? error.message : 'Server internal error',
+    code: 500,
+    msg: isDev ? error.message : 'Server internal error',
+    data: null,
   })
 })
 

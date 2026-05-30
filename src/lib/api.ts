@@ -4,7 +4,13 @@ function getToken() {
   return localStorage.getItem('token')
 }
 
-export async function apiFetch(path: string, options: RequestInit = {}) {
+export interface ApiResponse<T = any> {
+  code: number
+  msg: string
+  data: T
+}
+
+export async function apiFetch<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -19,11 +25,13 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     headers,
   })
 
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data.error || 'Request failed')
+  const result: ApiResponse<T> = await res.json()
+  
+  if (result.code !== 0) {
+    throw new Error(result.msg || 'Request failed')
   }
-  return data
+  
+  return result.data
 }
 
 export const authApi = {

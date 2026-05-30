@@ -6,225 +6,257 @@
 graph TB
     Client[浏览器客户端] --> Nginx[Nginx 反向代理]
     Nginx --> Frontend[前端静态资源]
-    Nginx --> Backend[后端 API 服务]
-    Backend --> SQLite[(SQLite 数据库)]
+    Nginx --> Backend[Node.js 后端服务]
+    Backend --> MySQL[(MySQL 数据库)]
     Backend --> Redis[(Redis 缓存)]
+    Backend --> COS[腾讯云 COS 对象存储]
+    Backend --> SMTP[QQ 邮箱 SMTP]
+    Backend --> Payment[支付接口]
+    Backend --> AI[AI 生成第三方 API]
 ```
 
-## 2. 技术选型
+## 2. 技术栈
 
-- **前端**：React 18 + TypeScript + Vite + Tailwind CSS + Zustand
-- **后端**：Express.js + TypeScript + ESM
-- **数据库**：SQLite（用户、作品、任务记录）
-- **缓存**：Redis（验证码、会话、限流）
-- **部署**：PM2 + Nginx
+- **前端**: React 18 + TypeScript + Vite + Tailwind CSS + Zustand
+- **后端**: Express.js + TypeScript + ESM
+- **数据库**: MySQL 8.0 (持久化存储)
+- **缓存**: Redis 7 (会话、验证码、限流、临时冻结)
+- **对象存储**: 腾讯云 COS (图片、视频、素材)
+- **部署**: Docker + Docker Compose (多容器)
+- **邮件**: QQ 邮箱 SMTP
+- **认证**: JWT (Bearer Token)
 
-## 3. 路由定义
+## 3. 容器架构
 
-### 前端路由
-| 路由 | 用途 |
+多容器部署架构，包含以下服务：
+
+| 服务 | 镜像/类型 | 作用 |
+|------|-----------|------|
+| xinmeng-ai-frontend | Nginx | 反向代理，提供前端静态资源 |
+| xinmeng-ai-backend | Node.js | 后端 API 服务 |
+| xinmeng-ai-mysql | MySQL 8.0 | 数据持久化存储 |
+| xinmeng-ai-redis | Redis 7-alpine | 缓存服务 |
+
+网络隔离：
+- backend-network: 后端服务间内部通信
+- frontend-network: 前端与后端通信
+
+## 4. 通信协议
+
+- **协议**: HTTP/HTTPS
+- **数据格式**: JSON
+- **字符编码**: UTF-8
+
+## 5. 身份鉴权
+
+登录状态依靠 JWT Token 机制：
+
+```
+Authorization: Bearer <token>
+```
+
+- Token 有效期: 7 天
+- 签名密钥: JWT_SECRET (环境变量)
+- 携带位置: HTTP 请求头 Authorization
+- Token 内容: { id, email, nickname, avatar, isAdmin }
+
+### 鉴权中间件
+
+- `authMiddleware`: 基础鉴权，验证 Token 有效性
+- `authMiddlewareWithBanCheck`: 增强鉴权，包含用户封禁状态检查
+
+## 6. 缓存服务 (Redis)
+
+Redis 用于存储以下内容：
+
+| 用途 | Key 格式 | TTL |
+|------|----------|-----|
+| 登录会话 | session:{userId} | 7天 |
+| 邮箱验证码 | code:{email} | 10分钟 |
+| 临时冻结算力 | freeze:{userId} | 可配置 |
+| 接口限流规则 | rate_limit:{key} | 动态 |
+| 热点数据缓存 | cache:{type}:{id} | 按需 |
+
+### Redis 工具函数
+
+```typescript
+import { setCache, getCache, delCache, existsCache, incrCache } from './utils/redis'
+
+await setCache('key', value, ttlSeconds)
+await getCache<T>('key')
+await delCache('key')
+```
+
+## 7. 数据存储
+
+### 7.1 MySQL 数据库
+
+存储结构化数据，包含以下核心表：
+
+| 表名 | 用途 |
 |------|------|
-| / | 首页（创作工作台） |
-| /login | 登录页 |
-| /canvas | 无限画布 |
-| /api-docs | API 接口文档 |
-| /models | 模型广场 |
-| /works | 作品管理 |
-| /settings | 设置 |
+| users | 用户信息 (头像、积分、会员状态等) |
+| works | 作品管理 (生成的图片/视频) |
+| generate_tasks | 生成任务记录 (异步任务状态) |
+| verify_codes | 验证码记录 |
+| password_resets | 密码重置令牌 |
+| orders | 订单记录 |
+| credit_records | 积分变动记录 |
+| api_channels | AI API 渠道配置 |
+| settings | 系统设置 |
+| admin_accounts | 管理员账号 |
 
-### 后端路由
-| 路由 | 方法 | 用途 |
-|------|------|------|
-| /api/auth/send-code | POST | 发送邮箱验证码 |
-| /api/auth/login | POST | 邮箱验证码登录 |
-| /api/auth/me | GET | 获取当前用户信息 |
-| /api/generate/image | POST | 提交图片生成任务 |
-| /api/generate/video | POST | 提交视频生成任务 |
-| /api/generate/status/:id | GET | 查询生成任务状态 |
-| /api/works | GET | 获取作品列表 |
-| /api/works/:id | DELETE | 删除作品 |
-| /api/user/profile | GET | 获取用户资料 |
-| /api/user/usage | GET | 获取用量统计 |
+### 7.2 云对象存储 (COS)
 
-## 4. API 定义
+腾讯云 COS 用于存储文件资源：
 
-### 4.1 发送验证码
+- 生成的图片
+- 生成的视频
+- 用户上传的素材
+- 用户头像
+
+配置项 (环境变量):
+- TENCENT_COS_SECRET_ID
+- TENCENT_COS_SECRET_KEY
+- TENCENT_COS_BUCKET
+- TENCENT_COS_REGION
+- TENCENT_COS_DOMAIN (可选)
+
+## 8. 接口规范
+
+### 8.1 统一响应格式
+
+所有接口统一返回以下格式：
+
 ```typescript
-// Request
-POST /api/auth/send-code
 {
-  email: string
-}
-
-// Response
-{
-  success: boolean,
-  message: string
+  code: number,      // 0: 成功, 其他: 错误码
+  msg: string,       // 提示信息
+  data: any | null   // 响应数据
 }
 ```
 
-### 4.2 登录
-```typescript
-// Request
-POST /api/auth/login
-{
-  email: string,
-  code: string
-}
+错误码定义:
+- 0: 成功
+- 400: 请求参数错误
+- 401: 未授权/Token 无效
+- 403: 禁止访问/账号封禁
+- 404: 资源不存在
+- 429: 请求过于频繁
+- 500: 服务器内部错误
 
-// Response
-{
-  success: boolean,
-  token: string,
-  user: {
-    id: number,
-    email: string,
-    nickname: string,
-    avatar: string,
-    credits: number,
-    isMember: boolean
-  }
-}
+### 8.2 参数校验
+
+所有接口使用 Zod 进行请求参数校验，防止恶意请求。
+
+### 8.3 接口限流
+
+- 通用限流: 15分钟 200次
+- 发送验证码: 1分钟 3次
+- 生成请求: 1分钟 10次
+
+## 9. 异步任务
+
+AI 绘图/视频等耗时操作采用异步处理模式：
+
+```
+1. 提交任务 → 返回 taskId
+2. 前端轮询 /api/generate/status/{taskId}
+3. 任务状态: pending → processing → completed/failed
 ```
 
-### 4.3 提交生成任务
-```typescript
-// Request
-POST /api/generate/image
-{
-  prompt: string,
-  negativePrompt?: string,
-  style: string,
-  aspectRatio: string,
-  quality: string,
-  count: number,
-  seed?: number,
-  isPublic: boolean
-}
+## 10. 第三方对接
 
-// Response
-{
-  success: boolean,
-  taskId: string,
-  estimatedTime: number
-}
-```
+### 10.1 QQ 邮箱 SMTP
 
-### 4.4 查询任务状态
-```typescript
-// Response
-{
-  taskId: string,
-  status: 'pending' | 'processing' | 'completed' | 'failed',
-  progress: number,
-  result?: string[],
-  error?: string
-}
-```
+配置项:
+- SMTP_HOST: smtp.qq.com
+- SMTP_PORT: 587
+- SMTP_USER: 邮箱账号
+- SMTP_PASS: SMTP 授权码
+- SMTP_FROM: 发件人
 
-## 5. 数据模型
+功能:
+- 发送登录验证码
+- 发送密码重置邮件
 
-### 5.1 ER 图
-```mermaid
-erDiagram
-    USER ||--o{ WORK : creates
-    USER ||--o{ GENERATE_TASK : submits
-    USER {
-        integer id PK
-        string email UK
-        string nickname
-        string avatar
-        integer credits
-        boolean is_member
-        datetime created_at
-    }
-    WORK {
-        integer id PK
-        integer user_id FK
-        string type
-        string prompt
-        string result_url
-        string thumbnail_url
-        string status
-        datetime created_at
-    }
-    GENERATE_TASK {
-        string id PK
-        integer user_id FK
-        string type
-        string prompt
-        string status
-        integer progress
-        string result
-        datetime created_at
-        datetime completed_at
-    }
-```
+### 10.2 支付接口
 
-### 5.2 DDL
-```sql
-CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL,
-    nickname TEXT,
-    avatar TEXT,
-    credits INTEGER DEFAULT 12860,
-    is_member INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+个人 T+0 支付接口 (待实现)
 
-CREATE TABLE works (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    type TEXT NOT NULL,
-    prompt TEXT NOT NULL,
-    result_url TEXT,
-    thumbnail_url TEXT,
-    status TEXT DEFAULT 'processing',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
+### 10.3 AI 生成 API
 
-CREATE TABLE generate_tasks (
-    id TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    type TEXT NOT NULL,
-    prompt TEXT NOT NULL,
-    negative_prompt TEXT,
-    style TEXT,
-    aspect_ratio TEXT,
-    quality TEXT,
-    count INTEGER,
-    status TEXT DEFAULT 'pending',
-    progress INTEGER DEFAULT 0,
-    result TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    completed_at DATETIME,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
+支持多渠道配置:
+- 图片生成 API
+- 视频生成 API
 
-CREATE TABLE verify_codes (
-    email TEXT PRIMARY KEY,
-    code TEXT NOT NULL,
-    expires_at DATETIME NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-```
+渠道配置存储在 api_channels 表中，支持权重分配和自动故障转移。
 
-## 6. 部署架构
+## 11. 部署架构
 
 ```mermaid
 graph LR
-    User[用户] --> Nginx[Nginx :80/:443]
-    Nginx -->|/api| Node[Node.js :3000]
-    Nginx -->|/| Static[前端静态文件]
-    Node --> SQLite[(SQLite)]
-    Node --> Redis[(Redis)]
+    User[用户] -->|80/443| Nginx[Nginx 容器]
+    Nginx -->|/api| Backend[Node.js 容器]
+    Nginx -->|/| Frontend[前端静态文件]
+    Backend --> MySQL[(MySQL 容器)]
+    Backend --> Redis[(Redis 容器)]
 ```
 
-### 6.1 部署配置
-- **服务器**：腾讯云 129.204.225.231
-- **前端**：构建后静态文件通过 Nginx 服务
-- **后端**：PM2 管理 Node.js 进程
-- **数据库**：SQLite 文件存储
-- **Nginx 配置**：反向代理 /api 到 Node 服务
+### 11.1 环境变量
+
+参考 `.env.example` 配置以下变量:
+
+```env
+NODE_ENV=production
+PORT=3001
+HOST_IP=localhost
+
+JWT_SECRET=your-jwt-secret-here
+ADMIN_JWT_SECRET=your-admin-jwt-secret-here
+
+DB_HOST=xinmeng-ai-mysql
+DB_PORT=3306
+DB_USER=xinmeng
+DB_PASSWORD=your-db-password-here
+DB_NAME=xinmeng
+DB_ROOT_PASSWORD=your-db-root-password-here
+
+REDIS_HOST=xinmeng-ai-redis
+REDIS_PORT=6379
+
+FRONTEND_URL=http://localhost
+
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=587
+SMTP_USER=your-email@qq.com
+SMTP_PASS=your-smtp-auth-code
+SMTP_FROM=your-email@qq.com
+SITE_NAME=新梦AI
+
+TENCENT_COS_SECRET_ID=your-cos-secret-id
+TENCENT_COS_SECRET_KEY=your-cos-secret-key
+TENCENT_COS_BUCKET=your-bucket
+TENCENT_COS_REGION=ap-guangzhou
+TENCENT_COS_DOMAIN=your-cos-domain.com
+```
+
+### 11.2 Docker Compose 启动
+
+```bash
+# 开发环境
+docker-compose up -d
+
+# 生产环境
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+## 12. 安全措施
+
+- Helmet 安全头
+- CORS 白名单控制
+- SQL 注入防护 (参数化查询)
+- XSS 防护
+- 暴力破解防护 (登录尝试追踪)
+- IP/设备黑名单
+- 审计日志
