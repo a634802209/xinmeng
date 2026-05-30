@@ -47,8 +47,8 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
       }`}
     >
       {/* Logo */}
-      <div className="px-4 mb-4 pl-10">
-        <img src="/LOGO.PNG.png" alt="XinMeng AI" className="h-20 w-auto" />
+      <div className="px-4 mb-4 pl-10 pt-4">
+        <Logo />
       </div>
 
       {/* Main Nav */}
