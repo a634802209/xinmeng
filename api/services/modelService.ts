@@ -22,7 +22,7 @@ export async function getModels(type?: string): Promise<Model[]> {
 
   sql += ' ORDER BY type, name'
 
-  const [rows] = await db.query<any[]>(sql, params)
+  const rows = await db.query<any[]>(sql, params)
 
   return rows.map((r) => ({
     id: r.id,
@@ -37,7 +37,7 @@ export async function getModels(type?: string): Promise<Model[]> {
 }
 
 export async function getModelById(id: number): Promise<Model | undefined> {
-  const [rows] = await db.query<any[]>('SELECT * FROM models WHERE id = ?', [id])
+  const rows = await db.query<any[]>('SELECT * FROM models WHERE id = ?', [id])
   const row = rows[0]
 
   if (!row) return undefined

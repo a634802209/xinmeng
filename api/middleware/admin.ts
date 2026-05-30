@@ -45,8 +45,8 @@ export async function adminMiddlewareWithCheck(req: AdminRequest, res: Response,
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string }
-    const [rows] = await db.query<any[]>('SELECT id, email, is_admin, is_banned FROM users WHERE id = ?', [decoded.id])
-    const user = rows[0]
+    const rows = await db.query<any[]>('SELECT id, email, is_admin, is_banned FROM users WHERE id = ?', [decoded.id])
+  const user = rows[0]
 
     if (!user || user.is_banned) {
       res.status(403).json({ success: false, error: 'Account is banned' })

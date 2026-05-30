@@ -10,7 +10,7 @@ export interface ChatMessage {
 }
 
 export async function getChatHistory(userId: number, limit: number = 50): Promise<ChatMessage[]> {
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT id, role, content, model, tokens_used, created_at FROM chat_messages WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
     [userId, limit]
   )

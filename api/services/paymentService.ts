@@ -46,7 +46,7 @@ export async function createPaymentOrder(userId: number, packageId: number) {
 }
 
 export async function processPaymentCallback(orderNo: string, paymentMethod: string) {
-  const [rows] = await db.query<any[]>('SELECT * FROM payments WHERE order_no = ?', [orderNo])
+  const rows = await db.query<any[]>('SELECT * FROM payments WHERE order_no = ?', [orderNo])
   const payment = rows[0]
 
   if (!payment) {
@@ -72,7 +72,7 @@ export async function processPaymentCallback(orderNo: string, paymentMethod: str
 }
 
 export async function getPaymentOrders(userId: number) {
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT id, order_no, amount, credits, status, payment_method, paid_at, created_at FROM payments WHERE user_id = ? ORDER BY created_at DESC',
     [userId]
   )

@@ -11,7 +11,7 @@ export interface Work {
 }
 
 export async function getWorksByUser(userId: number, limit: number = 50): Promise<Work[]> {
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT * FROM works WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
     [userId, limit]
   )
@@ -28,7 +28,7 @@ export async function getWorksByUser(userId: number, limit: number = 50): Promis
 }
 
 export async function getWorkById(workId: number) {
-  const [rows] = await db.query<any[]>('SELECT * FROM works WHERE id = ?', [workId])
+  const rows = await db.query<any[]>('SELECT * FROM works WHERE id = ?', [workId])
   return rows[0] || undefined
 }
 

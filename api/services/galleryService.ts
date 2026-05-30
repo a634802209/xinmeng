@@ -66,11 +66,11 @@ export async function getGalleryWorks(filter: GalleryFilter = {}): Promise<{
     ? 'ORDER BY w.likes_count DESC, w.created_at DESC'
     : 'ORDER BY w.created_at DESC'
 
-  const [countRows] = await db.query<any[]>(`SELECT COUNT(*) as total FROM works w ${whereClause}`, params)
-  const countResult = countRows[0]
+  const countRows = await db.query<any[]>(`SELECT COUNT(*) as total FROM works w ${whereClause}`, params)
+  const countResult = countRows.length > 0 ? countRows[0] : { total: 0 }
 
   const offset = (page - 1) * limit
-  const [workRows] = await db.query<any[]>(
+  const workRows = await db.query<any[]>(
     `
       SELECT
         w.id,
@@ -124,7 +124,7 @@ export async function likeWork(workId: number): Promise<boolean> {
 }
 
 export async function getWorkById(workId: number): Promise<GalleryWork | null> {
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     `
       SELECT
         w.id,

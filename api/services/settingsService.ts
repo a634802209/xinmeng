@@ -9,7 +9,7 @@ export interface UserSettings {
 }
 
 export async function getUserSettings(userId: number): Promise<UserSettings> {
-  const [rows] = await db.query<any[]>('SELECT * FROM user_settings WHERE user_id = ?', [userId])
+  const rows = await db.query<any[]>('SELECT * FROM user_settings WHERE user_id = ?', [userId])
   const row = rows[0]
 
   if (!row) {
@@ -39,12 +39,12 @@ export async function updateUserSettings(userId: number, settings: Partial<UserS
   await db.execute(
     `INSERT INTO user_settings (user_id, theme, language, notify_email, notify_push, auto_save)
      VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       theme = excluded.theme,
-       language = excluded.language,
-       notify_email = excluded.notify_email,
-       notify_push = excluded.notify_push,
-       auto_save = excluded.auto_save,
+     ON DUPLICATE KEY UPDATE
+       theme = VALUES(theme),
+       language = VALUES(language),
+       notify_email = VALUES(notify_email),
+       notify_push = VALUES(notify_push),
+       auto_save = VALUES(auto_save),
        updated_at = CURRENT_TIMESTAMP`,
     [
       userId,

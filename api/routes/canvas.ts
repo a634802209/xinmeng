@@ -7,7 +7,7 @@ const router = Router()
 
 router.get('/projects', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT id, name, created_at, updated_at FROM canvas_projects WHERE user_id = ? ORDER BY updated_at DESC',
     [userId]
   )
@@ -19,7 +19,7 @@ router.get('/projects/:id', authMiddleware, async (req: AuthRequest, res: Respon
   const userId = req.user!.id
   const projectId = parseInt(req.params.id)
 
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT * FROM canvas_projects WHERE id = ? AND user_id = ?',
     [projectId, userId]
   )
@@ -70,7 +70,7 @@ router.put('/projects/:id', authMiddleware, async (req: AuthRequest, res: Respon
   }
   const { name, nodes, connections } = req.body
 
-  const [projectRows] = await db.query<any[]>('SELECT id FROM canvas_projects WHERE id = ? AND user_id = ?', [projectId, userId])
+  const projectRows = await db.query<any[]>('SELECT id FROM canvas_projects WHERE id = ? AND user_id = ?', [projectId, userId])
   if (!projectRows[0]) {
     res.status(404).json({ success: false, error: 'Project not found' })
     return

@@ -10,10 +10,10 @@ router.get('/ip-blacklist', adminAuthMiddleware, async (req: AdminAuthRequest, r
   const pageSize = parseInt(req.query.pageSize as string) || 20
   const offset = (page - 1) * pageSize
 
-  const [countRows] = await db.query<any[]>('SELECT COUNT(*) as count FROM ip_blacklist')
-  const total = countRows[0].count
+  const countRows = await db.query<any[]>('SELECT COUNT(*) as count FROM ip_blacklist')
+  const total = countRows.length > 0 ? countRows[0].count : 0
 
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     `SELECT b.*, u.email as banned_by_email
      FROM ip_blacklist b
      LEFT JOIN users u ON b.banned_by = u.id
@@ -72,7 +72,7 @@ router.delete('/ip-blacklist/:id', adminAuthMiddleware, async (req: AdminAuthReq
     return
   }
 
-  const [rows] = await db.query<any[]>('SELECT ip FROM ip_blacklist WHERE id = ?', [id])
+  const rows = await db.query<any[]>('SELECT ip FROM ip_blacklist WHERE id = ?', [id])
   const item = rows[0]
   if (!item) {
     res.status(404).json({ success: false, error: 'IP blacklist entry not found' })
@@ -93,10 +93,10 @@ router.get('/device-blacklist', adminAuthMiddleware, async (req: AdminAuthReques
   const pageSize = parseInt(req.query.pageSize as string) || 20
   const offset = (page - 1) * pageSize
 
-  const [countRows] = await db.query<any[]>('SELECT COUNT(*) as count FROM device_blacklist')
-  const total = countRows[0].count
+  const countRows = await db.query<any[]>('SELECT COUNT(*) as count FROM device_blacklist')
+  const total = countRows.length > 0 ? countRows[0].count : 0
 
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     `SELECT b.*, a.username as banned_by_username
      FROM device_blacklist b
      LEFT JOIN admin_accounts a ON b.banned_by = a.id
@@ -149,7 +149,7 @@ router.delete('/device-blacklist/:id', adminAuthMiddleware, async (req: AdminAut
     return
   }
 
-  const [rows] = await db.query<any[]>('SELECT fingerprint FROM device_blacklist WHERE id = ?', [id])
+  const rows = await db.query<any[]>('SELECT fingerprint FROM device_blacklist WHERE id = ?', [id])
   const item = rows[0]
   if (!item) {
     res.status(404).json({ success: false, error: 'Device blacklist entry not found' })
@@ -188,10 +188,10 @@ router.get('/audit-logs', adminAuthMiddleware, async (req: AdminAuthRequest, res
     whereClause += ' AND is_blocked = 1'
   }
 
-  const [countRows] = await db.query<any[]>(`SELECT COUNT(*) as count FROM access_audit_logs ${whereClause}`, params)
-  const total = countRows[0].count
+  const countRows = await db.query<any[]>(`SELECT COUNT(*) as count FROM access_audit_logs ${whereClause}`, params)
+  const total = countRows.length > 0 ? countRows[0].count : 0
 
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     `SELECT a.*, u.email as user_email
      FROM access_audit_logs a
      LEFT JOIN users u ON a.user_id = u.id
@@ -224,10 +224,10 @@ router.get('/login-attempts', adminAuthMiddleware, async (req: AdminAuthRequest,
     params.push(ip)
   }
 
-  const [countRows] = await db.query<any[]>(`SELECT COUNT(*) as count FROM login_attempts ${whereClause}`, params)
-  const total = countRows[0].count
+  const countRows = await db.query<any[]>(`SELECT COUNT(*) as count FROM login_attempts ${whereClause}`, params)
+  const total = countRows.length > 0 ? countRows[0].count : 0
 
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     `SELECT * FROM login_attempts ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
     [...params, pageSize, offset]
   )
@@ -242,31 +242,31 @@ router.get('/login-attempts', adminAuthMiddleware, async (req: AdminAuthRequest,
 })
 
 router.get('/stats', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
-  const [ipRows] = await db.query<any[]>('SELECT COUNT(*) as count FROM ip_blacklist')
-  const ipBlacklistCount = ipRows[0].count
+  const ipRows = await db.query<any[]>('SELECT COUNT(*) as count FROM ip_blacklist')
+  const ipBlacklistCount = ipRows.length > 0 ? ipRows[0].count : 0
 
-  const [deviceRows] = await db.query<any[]>('SELECT COUNT(*) as count FROM device_blacklist')
-  const deviceBlacklistCount = deviceRows[0].count
+  const deviceRows = await db.query<any[]>('SELECT COUNT(*) as count FROM device_blacklist')
+  const deviceBlacklistCount = deviceRows.length > 0 ? deviceRows[0].count : 0
 
-  const [blockedRows] = await db.query<any[]>(
-    "SELECT COUNT(*) as count FROM access_audit_logs WHERE is_blocked = 1 AND date(created_at) = date('now')"
+  const blockedRows = await db.query<any[]>(
+    "SELECT COUNT(*) as count FROM access_audit_logs WHERE is_blocked = 1 AND DATE(created_at) = CURDATE()"
   )
-  const blockedRequestsToday = blockedRows[0].count
+  const blockedRequestsToday = blockedRows.length > 0 ? blockedRows[0].count : 0
 
-  const [failedRows] = await db.query<any[]>(
-    "SELECT COUNT(*) as count FROM login_attempts WHERE success = 0 AND date(created_at) = date('now')"
+  const failedRows = await db.query<any[]>(
+    "SELECT COUNT(*) as count FROM login_attempts WHERE success = 0 AND DATE(created_at) = CURDATE()"
   )
-  const failedLoginsToday = failedRows[0].count
+  const failedLoginsToday = failedRows.length > 0 ? failedRows[0].count : 0
 
-  const [uniqueRows] = await db.query<any[]>(
-    "SELECT COUNT(DISTINCT ip) as count FROM access_audit_logs WHERE date(created_at) = date('now')"
+  const uniqueRows = await db.query<any[]>(
+    "SELECT COUNT(DISTINCT ip) as count FROM access_audit_logs WHERE DATE(created_at) = CURDATE()"
   )
-  const uniqueIpsToday = uniqueRows[0].count
+  const uniqueIpsToday = uniqueRows.length > 0 ? uniqueRows[0].count : 0
 
-  const [highRiskRows] = await db.query<any[]>(
-    "SELECT COUNT(*) as count FROM access_audit_logs WHERE risk_score >= 50 AND date(created_at) = date('now')"
+  const highRiskRows = await db.query<any[]>(
+    "SELECT COUNT(*) as count FROM access_audit_logs WHERE risk_score >= 50 AND DATE(created_at) = CURDATE()"
   )
-  const highRiskEvents = highRiskRows[0].count
+  const highRiskEvents = highRiskRows.length > 0 ? highRiskRows[0].count : 0
 
   res.json({
     success: true,

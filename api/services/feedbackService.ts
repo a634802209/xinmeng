@@ -26,7 +26,7 @@ export async function createFeedback(userId: number, type: string, content: stri
 }
 
 export async function getFeedbacks(userId: number): Promise<Feedback[]> {
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT id, type, content, contact, status, created_at FROM feedbacks WHERE user_id = ? ORDER BY created_at DESC',
     [userId]
   )

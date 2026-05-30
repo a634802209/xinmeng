@@ -10,7 +10,7 @@ export interface CommunityMessage {
 }
 
 export async function getCommunityMessages(limit: number = 50): Promise<CommunityMessage[]> {
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     `SELECT
       id,
       user_id as userId,

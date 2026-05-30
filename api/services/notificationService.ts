@@ -10,7 +10,7 @@ export interface Notification {
 }
 
 export async function getNotifications(userId: number, limit: number = 20): Promise<Notification[]> {
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT id, title, content, type, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
     [userId, limit]
   )
@@ -26,11 +26,11 @@ export async function getNotifications(userId: number, limit: number = 20): Prom
 }
 
 export async function getUnreadCount(userId: number): Promise<number> {
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0',
     [userId]
   )
-  return rows[0].count
+  return rows.length > 0 ? rows[0].count : 0
 }
 
 export async function markAsRead(notificationId: number, userId: number): Promise<void> {

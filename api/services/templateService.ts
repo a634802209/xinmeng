@@ -27,7 +27,7 @@ export async function getTemplates(category?: string, type?: string): Promise<Te
 
   sql += ' ORDER BY is_hot DESC, usage_count DESC'
 
-  const [rows] = await db.query<any[]>(sql, params)
+  const rows = await db.query<any[]>(sql, params)
 
   return rows.map((r) => ({
     id: r.id,
@@ -43,7 +43,7 @@ export async function getTemplates(category?: string, type?: string): Promise<Te
 }
 
 export async function getTemplateById(id: number): Promise<Template | undefined> {
-  const [rows] = await db.query<any[]>('SELECT * FROM templates WHERE id = ?', [id])
+  const rows = await db.query<any[]>('SELECT * FROM templates WHERE id = ?', [id])
   const row = rows[0]
 
   if (!row) return undefined
