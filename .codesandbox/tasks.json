@@ -1,0 +1,20 @@
+{
+  "setup": {
+    "name": "Setup Dependencies",
+    "command": "npm install"
+  },
+  "frontend": {
+    "name": "Frontend Dev Server",
+    "command": "npm run client:dev",
+    "runAtStart": true
+  },
+  "backend": {
+    "name": "Backend Dev Server",
+    "command": "npm run server:dev",
+    "runAtStart": true
+  },
+  "build": {
+    "name": "Build Project",
+    "command": "npm run build"
+  }
+}
