@@ -103,6 +103,19 @@ ok "环境变量已写入 .env"
 log "Docker 构建中（首次约 5-10 分钟）..."
 $COMPOSE_CMD up -d --build
 
+log "等待 MySQL 初始化完成（首次约 30-60 秒）..."
+for i in $(seq 1 60); do
+    if $COMPOSE_CMD exec -T xinmeng-ai-mysql mysqladmin ping -h localhost -u root -p${DB_ROOT_PASSWORD} &>/dev/null 2>&1; then
+        ok "MySQL 就绪"
+        break
+    fi
+    if [ "$i" -eq 60 ]; then
+        err "MySQL 初始化超时，查看日志："
+        $COMPOSE_CMD logs --tail=30 xinmeng-ai-mysql
+    fi
+    sleep 2
+done
+
 log "等待服务就绪..."
 for i in $(seq 1 60); do
     if curl -sf http://localhost/health > /dev/null 2>&1; then
