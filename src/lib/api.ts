@@ -4,7 +4,13 @@ function getToken() {
   return localStorage.getItem('token')
 }
 
-export async function apiFetch(path: string, options: RequestInit = {}) {
+export interface ApiResponse<T = any> {
+  code: number
+  msg: string
+  data: T
+}
+
+export async function apiFetch<T = any>(path: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
   const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -19,18 +25,32 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     headers,
   })
 
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data.error || 'Request failed')
+  const data = await res.json() as ApiResponse<T>
+  
+  // 如果状态码不是200，抛出错误
+  if (data.code !== 200) {
+    throw new Error(data.msg || '请求失败')
   }
+  
   return data
 }
 
 export const authApi = {
-  sendCode: (email: string) => apiFetch('/api/auth/send-code', { method: 'POST', body: JSON.stringify({ email }) }),
+  sendCode: (email: string) => apiFetch('/api/email/send-code', { method: 'POST', body: JSON.stringify({ email }) }),
   login: (email: string, code: string) =>
-    apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, code }) }),
+    apiFetch('/api/user/login', { method: 'POST', body: JSON.stringify({ email, code }) }),
   me: () => apiFetch('/api/auth/me'),
+}
+
+export const homeApi = {
+  init: () => apiFetch('/api/home/init'),
+}
+
+export const payApi = {
+  createOrder: (data: { recharge_type?: string; amount: number; power_num: number }) =>
+    apiFetch('/api/pay/create', { method: 'POST', body: JSON.stringify(data) }),
+  getOrderStatus: (orderNo: string) =>
+    apiFetch(`/api/pay/status/${orderNo}`),
 }
 
 export const generateApi = {

@@ -1,3 +1,6 @@
+import dotenv from 'dotenv'
+dotenv.config()
+
 import mysql, { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise'
 
 const DB_HOST = process.env.DB_HOST || 'localhost'
@@ -109,6 +112,7 @@ export async function initDB(): Promise<void> {
         nickname VARCHAR(255),
         avatar VARCHAR(500),
         credits INT DEFAULT 0,
+        remain_power INT DEFAULT 0,
         is_member INT DEFAULT 0,
         member_expire_at DATETIME,
         is_admin INT DEFAULT 0,
@@ -182,9 +186,11 @@ export async function initDB(): Promise<void> {
         user_id INT NOT NULL,
         order_no VARCHAR(64) UNIQUE NOT NULL,
         amount INT NOT NULL,
-        status VARCHAR(50) DEFAULT 'pending',
+        power_num INT NOT NULL DEFAULT 0,
+        status INT DEFAULT 0,
         payment_method VARCHAR(50),
         paid_at DATETIME,
+        create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

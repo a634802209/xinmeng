@@ -1,16 +1,25 @@
-import { useState, useEffect } from 'react'
-import { Check, Shield, Zap, Gift } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Check, Shield, Zap, Gift, QrCode, X } from 'lucide-react'
 import Layout from '@/components/Layout'
 import { useAuthStore } from '@/store/authStore'
+import { payApi } from '@/lib/api'
 
 interface RechargePackage {
   id: number
   name: string
-  credits: number
+  power: number
   price: number
   bonus: number
   isHot: boolean
 }
+
+const RECHARGE_PACKAGES: RechargePackage[] = [
+  { id: 1, name: '1000算力', power: 1000, price: 1000, bonus: 0, isHot: false },
+  { id: 2, name: '5000算力', power: 5000, price: 4500, bonus: 500, isHot: true },
+  { id: 3, name: '10000算力', power: 10000, price: 8000, bonus: 1500, isHot: false },
+  { id: 4, name: '50000算力', power: 50000, price: 35000, bonus: 10000, isHot: false },
+  { id: 5, name: '100000算力', power: 100000, price: 60000, bonus: 30000, isHot: false },
+]
 
 const PAYMENT_METHODS = [
   {
@@ -39,82 +48,90 @@ const PAYMENT_METHODS = [
 
 export default function Recharge() {
   const { user, token, updateUser } = useAuthStore()
-  const [packages, setPackages] = useState<RechargePackage[]>([])
-  const [selectedPackage, setSelectedPackage] = useState<number | null>(null)
+  const [selectedPackage, setSelectedPackage] = useState<number | null>(2)
   const [paymentMethod, setPaymentMethod] = useState('wechat')
   const [loading, setLoading] = useState(false)
-  const [orderLoading, setOrderLoading] = useState(false)
+  const [showQrModal, setShowQrModal] = useState(false)
+  const [currentOrder, setCurrentOrder] = useState<{ orderNo: string; payUrl: string } | null>(null)
+  const [orderStatus, setOrderStatus] = useState<number>(0)
+  const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  const balance = user?.credits || 0
+  const balance = user?.remain_power || 0
+
+  const selectedPkg = RECHARGE_PACKAGES.find((p) => p.id === selectedPackage)
+
+  // 清理轮询
+  const clearPolling = () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+  }
 
   useEffect(() => {
-    const loadPackages = async () => {
-      setLoading(true)
+    return () => clearPolling()
+  }, [])
+
+  // 轮询订单状态
+  const pollOrderStatus = async (orderNo: string) => {
+    pollTimerRef.current = setInterval(async () => {
       try {
-        const res = await fetch('/api/payment/packages', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const data = await res.json()
-        if (data?.success && data.data?.packages) {
-          setPackages(data.data.packages)
-          if (data.data.packages.length > 0) {
-            setSelectedPackage(data.data.packages[0].id)
-          }
-        }
-      } catch (err) {
-        console.error('加载套餐失败:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    if (token) loadPackages()
-  }, [token])
-
-  const selectedPkg = packages.find((p) => p.id === selectedPackage)
-
-  const handleRecharge = async () => {
-    if (!selectedPackage) return
-    setOrderLoading(true)
-    try {
-      const res = await fetch('/api/payment/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ packageId: selectedPackage }),
-      })
-      const data = await res.json()
-      if (data?.success && data.data?.order) {
-        alert(`订单创建成功！订单号: ${data.data.order.orderNo}\n金额: ¥${(data.data.order.amount / 100).toFixed(2)}\n获得积分: ${data.data.order.credits}`)
-
-        const callbackRes = await fetch('/api/payment/callback', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderNo: data.data.order.orderNo,
-            paymentMethod: paymentMethod === 'wechat' ? '微信支付' : '支付宝',
-          }),
-        })
-        const callbackData = await callbackRes.json()
-        if (callbackData?.success) {
-          alert(`支付成功！获得 ${callbackData.data.credits} 积分`)
-          const meRes = await fetch('/api/auth/me', {
+        const res = await payApi.getOrderStatus(orderNo)
+        if (res.data?.status === 1) {
+          // 支付成功
+          clearPolling()
+          setOrderStatus(1)
+          setShowQrModal(false)
+          
+          // 刷新用户信息
+          const userRes = await fetch('/api/auth/me', {
             headers: { Authorization: `Bearer ${token}` },
           })
-          const meData = await meRes.json()
-          if (meData?.success && meData.data?.user) {
-            updateUser(meData.data.user)
+          const userData = await userRes.json()
+          if (userData.code === 200 && userData.data?.user) {
+            updateUser(userData.data.user)
           }
+          
+          alert('充值成功！')
         }
-      } else {
-        alert(data?.error || '创建订单失败')
+      } catch (err) {
+        console.error('轮询订单状态失败:', err)
       }
-    } catch (err) {
-      alert('充值失败')
+    }, 2000)
+  }
+
+  // 创建订单
+  const handleRecharge = async () => {
+    if (!selectedPkg) return
+    
+    setLoading(true)
+    try {
+      const res = await payApi.createOrder({
+        recharge_type: 'power',
+        amount: selectedPkg.price,
+        power_num: selectedPkg.power + selectedPkg.bonus,
+      })
+      
+      if (res.code === 200 && res.data) {
+        setCurrentOrder(res.data)
+        setOrderStatus(0)
+        setShowQrModal(true)
+        
+        // 开始轮询订单状态
+        pollOrderStatus(res.data.orderNo)
+      }
+    } catch (err: any) {
+      alert(err.message || '创建订单失败')
     } finally {
-      setOrderLoading(false)
+      setLoading(false)
     }
+  }
+
+  // 关闭二维码弹窗
+  const closeQrModal = () => {
+    clearPolling()
+    setShowQrModal(false)
+    setCurrentOrder(null)
   }
 
   return (
@@ -124,135 +141,165 @@ export default function Recharge() {
       showTopBar={false}
       rightContent={
         <div className="flex items-center gap-4">
-          <span className="text-sm text-slate-500">当前余额</span>
+          <span className="text-sm text-slate-500">当前算力</span>
           <span className="text-lg font-semibold text-slate-900">
-            ¥{(balance / 100).toFixed(2)}
+            {balance}
           </span>
         </div>
       }
     >
       <div className="max-w-3xl mx-auto py-10 px-6">
-        {loading ? (
-          <div className="text-center py-20 text-slate-400">加载中...</div>
-        ) : (
-          <>
-            {/* Recharge Packages */}
-            <div className="mb-8">
-              <h3 className="text-base font-medium text-slate-900 mb-4 flex items-center gap-2">
-                <Zap className="w-5 h-5 text-amber-500" />
-                选择充值套餐
-              </h3>
-              <div className="grid grid-cols-3 gap-4">
-                {packages.map((pkg) => (
-                  <button
-                    key={pkg.id}
-                    onClick={() => setSelectedPackage(pkg.id)}
-                    className={`relative p-5 rounded-2xl border-2 text-center transition-all ${
-                      selectedPackage === pkg.id
-                        ? 'border-blue-500 bg-blue-50 text-blue-600'
-                        : 'border-slate-200 text-slate-700 hover:border-slate-300'
-                    }`}
-                  >
-                    {pkg.isHot && (
-                      <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-medium">
-                        HOT
-                      </div>
-                    )}
-                    {pkg.bonus > 0 && (
-                      <div className="absolute top-2 right-2 flex items-center gap-0.5 text-[10px] text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full">
-                        <Gift className="w-3 h-3" />
-                        赠{pkg.bonus}
-                      </div>
-                    )}
-                    <div className="text-lg font-bold mb-1">{pkg.name}</div>
-                    <div className="text-2xl font-bold mb-1">
-                      ¥{(pkg.price / 100).toFixed(2)}
-                    </div>
-                    <div className="text-xs text-slate-400">
-                      获得 {pkg.credits + pkg.bonus} 积分
-                    </div>
-                    {selectedPackage === pkg.id && (
-                      <div className="absolute bottom-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                        <Check className="w-3 h-3 text-white" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
+        {/* 充值套餐 */}
+        <div className="mb-8">
+          <h3 className="text-base font-medium text-slate-900 mb-4 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-amber-500" />
+            选择充值套餐
+          </h3>
+          <div className="grid grid-cols-3 gap-4">
+            {RECHARGE_PACKAGES.map((pkg) => (
+              <button
+                key={pkg.id}
+                onClick={() => setSelectedPackage(pkg.id)}
+                className={`relative p-5 rounded-2xl border-2 text-center transition-all ${
+                  selectedPackage === pkg.id
+                    ? 'border-blue-500 bg-blue-50 text-blue-600'
+                    : 'border-slate-200 text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                {pkg.isHot && (
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-red-500 text-white text-[10px] rounded-full font-medium">
+                    HOT
+                  </div>
+                )}
+                {pkg.bonus > 0 && (
+                  <div className="absolute top-2 right-2 flex items-center gap-0.5 text-[10px] text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full">
+                    <Gift className="w-3 h-3" />
+                    赠{pkg.bonus}
+                  </div>
+                )}
+                <div className="text-lg font-bold mb-1">{pkg.name}</div>
+                <div className="text-2xl font-bold mb-1">
+                  ¥{(pkg.price / 100).toFixed(2)}
+                </div>
+                <div className="text-xs text-slate-400">
+                  获得 {pkg.power + pkg.bonus} 算力
+                </div>
+                {selectedPackage === pkg.id && (
+                  <div className="absolute bottom-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                    <Check className="w-3 h-3 text-white" />
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 支付方式 */}
+        <div className="mb-8">
+          <h3 className="text-base font-medium text-slate-900 mb-4">支付方式</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {PAYMENT_METHODS.map((method) => (
+              <button
+                key={method.id}
+                onClick={() => setPaymentMethod(method.id)}
+                className={`relative flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                  paymentMethod === method.id
+                    ? 'border-blue-500 bg-blue-50/50'
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {method.icon}
+                <span className="text-sm font-medium text-slate-900">
+                  {method.name}
+                </span>
+                {paymentMethod === method.id && (
+                  <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                    <Check className="w-3 h-3 text-white" />
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 充值摘要 */}
+        {selectedPkg && (
+          <div className="mb-6 p-4 bg-slate-50 rounded-xl">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">充值套餐</span>
+              <span className="font-medium">{selectedPkg.name}</span>
             </div>
-
-            {/* Payment Method */}
-            <div className="mb-8">
-              <h3 className="text-base font-medium text-slate-900 mb-4">支付方式</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {PAYMENT_METHODS.map((method) => (
-                  <button
-                    key={method.id}
-                    onClick={() => setPaymentMethod(method.id)}
-                    className={`relative flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
-                      paymentMethod === method.id
-                        ? 'border-blue-500 bg-blue-50/50'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    {method.icon}
-                    <span className="text-sm font-medium text-slate-900">
-                      {method.name}
-                    </span>
-                    {paymentMethod === method.id && (
-                      <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                        <Check className="w-3 h-3 text-white" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
+            <div className="flex items-center justify-between text-sm mt-2">
+              <span className="text-slate-500">获得算力</span>
+              <span className="font-medium text-blue-600">
+                {selectedPkg.power + selectedPkg.bonus} 算力
+                {selectedPkg.bonus > 0 && (
+                  <span className="text-xs text-orange-500 ml-1">
+                    (含赠送 {selectedPkg.bonus})
+                  </span>
+                )}
+              </span>
             </div>
+            <div className="flex items-center justify-between text-sm mt-2 pt-2 border-t border-slate-200">
+              <span className="text-slate-500">支付金额</span>
+              <span className="text-lg font-bold text-slate-900">
+                ¥{(selectedPkg.price / 100).toFixed(2)}
+              </span>
+            </div>
+          </div>
+        )}
 
-            {/* Summary */}
-            {selectedPkg && (
-              <div className="mb-6 p-4 bg-slate-50 rounded-xl">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">充值套餐</span>
-                  <span className="font-medium">{selectedPkg.name}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm mt-2">
-                  <span className="text-slate-500">获得积分</span>
-                  <span className="font-medium text-blue-600">
-                    {selectedPkg.credits + selectedPkg.bonus} 积分
-                    {selectedPkg.bonus > 0 && (
-                      <span className="text-xs text-orange-500 ml-1">
-                        (含赠送 {selectedPkg.bonus})
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm mt-2 pt-2 border-t border-slate-200">
-                  <span className="text-slate-500">支付金额</span>
-                  <span className="text-lg font-bold text-slate-900">
-                    ¥{(selectedPkg.price / 100).toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            )}
+        {/* 充值按钮 */}
+        <button
+          onClick={handleRecharge}
+          disabled={!selectedPackage || loading}
+          className="w-full py-3.5 bg-blue-600 text-white text-base font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        >
+          {loading ? '创建订单中...' : '立即充值'}
+        </button>
 
-            {/* Recharge Button */}
+        {/* 安全提示 */}
+        <div className="mt-4 flex items-center justify-center gap-1.5 text-slate-400">
+          <Shield className="w-4 h-4" />
+          <span className="text-xs">安全支付保障中，您的信息将严格保密</span>
+        </div>
+      </div>
+
+      {/* 二维码弹窗 */}
+      {showQrModal && currentOrder && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 relative">
             <button
-              onClick={handleRecharge}
-              disabled={!selectedPackage || orderLoading}
-              className="w-full py-3.5 bg-blue-600 text-white text-base font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              onClick={closeQrModal}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
             >
-              {orderLoading ? '处理中...' : '立即充值'}
+              <X className="w-6 h-6" />
             </button>
 
-            {/* Security Note */}
-            <div className="mt-4 flex items-center justify-center gap-1.5 text-slate-400">
-              <Shield className="w-4 h-4" />
-              <span className="text-xs">安全支付保障中，您的信息将严格保密</span>
+            <div className="text-center mb-6">
+              <QrCode className="w-12 h-12 mx-auto text-blue-500 mb-2" />
+              <h3 className="text-xl font-bold text-slate-900">请扫码支付</h3>
+              <p className="text-slate-500 mt-1">
+                {selectedPkg && `¥${(selectedPkg.price / 100).toFixed(2)}`}
+              </p>
             </div>
-          </>
-        )}
-      </div>
+
+            <div className="bg-slate-100 rounded-xl p-6 flex items-center justify-center mb-6">
+              <div className="w-48 h-48 bg-white border-2 border-dashed border-slate-300 rounded-lg flex items-center justify-center">
+                <div className="text-center text-slate-400">
+                  <QrCode className="w-12 h-12 mx-auto mb-2" />
+                  <span className="text-sm">二维码区域</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-center text-sm text-slate-500">
+              <p>订单号：{currentOrder.orderNo}</p>
+              <p className="mt-1">正在等待支付...</p>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   )
 }

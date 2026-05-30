@@ -1,4 +1,5 @@
 import db from '../db.js'
+import { getCOSFileUrl } from '../utils/cos.js'
 
 export interface Work {
   id: number
@@ -20,8 +21,8 @@ export async function getWorksByUser(userId: number, limit: number = 50): Promis
     id: w.id,
     type: w.type,
     prompt: w.prompt,
-    resultUrl: w.result_url,
-    thumbnailUrl: w.thumbnail_url,
+    resultUrl: w.result_url ? getCOSFileUrl(w.result_url) : null,
+    thumbnailUrl: w.thumbnail_url ? getCOSFileUrl(w.thumbnail_url) : null,
     status: w.status,
     createdAt: w.created_at,
   }))
@@ -29,7 +30,15 @@ export async function getWorksByUser(userId: number, limit: number = 50): Promis
 
 export async function getWorkById(workId: number) {
   const rows = await db.query<any[]>('SELECT * FROM works WHERE id = ?', [workId])
-  return rows[0] || undefined
+  if (rows[0]) {
+    const w = rows[0]
+    return {
+      ...w,
+      resultUrl: w.result_url ? getCOSFileUrl(w.result_url) : null,
+      thumbnailUrl: w.thumbnail_url ? getCOSFileUrl(w.thumbnail_url) : null,
+    }
+  }
+  return undefined
 }
 
 export async function deleteWork(workId: number): Promise<void> {

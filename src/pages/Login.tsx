@@ -1,18 +1,24 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Mail, Shield, ArrowLeft, Sparkles } from 'lucide-react'
 import { authApi } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
+import './Login.css'
 
 export default function Login() {
+  const [form, setForm] = useState({
+    email: '',
+    code: '',
+    agreed: false
+  })
+  const [countdown, setCountdown] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+  
   const navigate = useNavigate()
   const { setAuth, isAuthenticated } = useAuthStore()
-  const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
-  const [agreed, setAgreed] = useState(false)
-  const [countdown, setCountdown] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+
+  // 邮箱格式校验
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -21,175 +27,165 @@ export default function Login() {
   }, [isAuthenticated, navigate])
 
   useEffect(() => {
+    let timer: number
     if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
-      return () => clearTimeout(timer)
+      timer = window.setInterval(() => {
+        setCountdown(c => c - 1)
+      }, 1000)
     }
+    return () => clearInterval(timer)
   }, [countdown])
 
-  const handleSendCode = async () => {
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  // 发送验证码
+  const sendCode = async () => {
+    if (!isEmailValid) {
       setError('请输入有效的邮箱地址')
       return
     }
     try {
       setError('')
-      const res = await authApi.sendCode(email)
-      if (res.success) {
-        setCountdown(60)
-        alert(`验证码已发送（演示模式）：${res.demoCode}`)
-      }
+      const res = await authApi.sendCode(form.email)
+      setCountdown(60)
+      alert(`验证码已发送（演示模式）：${res.data?.demoCode || '123456'}`)
     } catch (err: any) {
       setError(err.message || '发送失败')
     }
   }
 
-  const handleLogin = async () => {
-    if (!email || !code) {
-      setError('请填写邮箱和验证码')
+  // 登录
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!form.agreed) {
+      setError('请先阅读并同意协议')
       return
     }
-    if (!agreed) {
-      setError('请同意用户协议和隐私政策')
-      return
-    }
+    
+    setIsLoading(true)
     try {
-      setLoading(true)
       setError('')
-      const res = await authApi.login(email, code)
-      if (res.success) {
-        setAuth(res.user, res.token)
+      const res = await authApi.login(form.email, form.code)
+      if (res.data?.userInfo && res.data?.token) {
+        setAuth(res.data.userInfo, res.data.token)
         navigate('/')
       }
     } catch (err: any) {
       setError(err.message || '登录失败')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen w-full flex bg-gradient-to-br from-slate-50 via-white to-blue-50">
-      {/* Left Panel */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-center items-center relative overflow-hidden p-12">
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-20 left-20 w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl animate-pulse" />
-          <div className="absolute bottom-20 right-20 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
-        </div>
+    <div className="login-container">
+      {/* 背景装饰 */}
+      <div className="login-bg-decoration" />
 
-        <div className="relative z-10 text-center">
-          <div className="flex items-center justify-center gap-3 mb-8">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-              <span className="text-white font-bold text-xl">X</span>
-            </div>
-            <span className="text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
-              XinMeng.ai
-            </span>
+      {/* 主登录卡片 */}
+      <div className="login-card">
+        {/* 左侧品牌展示区 */}
+        <div className="brand-section">
+          <div className="logo-wrapper">
+            <img 
+              src="/xinmeng-logo.png" 
+              alt="XinMeng AI" 
+              className="logo-img" 
+            />
+            <h1 className="brand-name">
+              XinMeng AI
+            </h1>
           </div>
-
-          <h1 className="text-4xl font-bold text-slate-800 mb-4">
-            让创意与智能，开启无限可能
-          </h1>
-          <p className="text-lg text-slate-500 mb-12">
-            AI 驱动的创作平台，激发灵感，释放想象
+          <p className="brand-slogan">
+            ◇ 开启你的智能创作之旅 ◇
           </p>
-
-          <div className="relative w-80 h-80 mx-auto">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-400/20 to-purple-500/20 rounded-3xl backdrop-blur-sm border border-white/50 shadow-2xl" />
-            <div className="absolute inset-4 bg-gradient-to-br from-blue-300/30 to-purple-400/30 rounded-2xl backdrop-blur-md" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Sparkles className="w-24 h-24 text-blue-500/40" />
-            </div>
-            <div className="absolute -top-4 -right-4 w-20 h-20 bg-gradient-to-br from-blue-400 to-purple-500 rounded-2xl opacity-20 rotate-12" />
-            <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-gradient-to-br from-purple-400 to-pink-500 rounded-xl opacity-20 -rotate-12" />
-          </div>
         </div>
-      </div>
 
-      {/* Right Panel */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6">
-        <div className="w-full max-w-md">
-          <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-100 p-8">
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">邮箱登录</h2>
-            <p className="text-slate-500 mb-8">请输入邮箱并完成验证码验证</p>
+        {/* 右侧登录表单区 */}
+        <div className="form-section">
+          <div className="form-header">
+            <h2 className="form-title">欢迎登录</h2>
+            <p className="form-subtitle">使用邮箱继续登录 XinMeng AI</p>
+          </div>
 
+          <form className="login-form" onSubmit={handleLogin}>
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+              <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm text-center">
                 {error}
               </div>
             )}
-
-            <div className="space-y-4">
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            
+            {/* 邮箱输入框 */}
+            <div className="form-item">
+              <div className="input-wrapper">
+                <svg className="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
                 <input
                   type="email"
-                  placeholder="请输入邮箱地址"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className="form-input"
+                  placeholder="邮箱地址"
+                  required
                 />
               </div>
+            </div>
 
-              <div className="relative">
-                <Shield className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            {/* 验证码输入框 + 获取按钮 */}
+            <div className="form-item code-item">
+              <div className="input-wrapper">
+                <svg className="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
                 <input
                   type="text"
-                  placeholder="请输入6位验证码"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  className="w-full pl-12 pr-28 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  value={form.code}
+                  onChange={(e) => setForm({ ...form, code: e.target.value })}
+                  className="form-input"
+                  placeholder="验证码"
+                  required
                 />
-                <button
-                  onClick={handleSendCode}
-                  disabled={countdown > 0}
-                  className={`absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    countdown > 0
-                      ? 'text-slate-400 cursor-not-allowed'
-                      : 'text-blue-600 hover:bg-blue-50'
-                  }`}
-                >
-                  {countdown > 0 ? `${countdown}s` : '发送验证码'}
-                </button>
               </div>
-
               <button
-                onClick={handleLogin}
-                disabled={loading}
-                className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-xl hover:shadow-lg hover:shadow-blue-500/25 transition-all active:scale-[0.98] disabled:opacity-70"
+                type="button"
+                className="code-btn"
+                disabled={countdown > 0 || !isEmailValid}
+                onClick={sendCode}
               >
-                {loading ? '登录中...' : '立即登录'}
+                {countdown > 0 ? `${countdown}s后重发` : '获取验证码'}
               </button>
-
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-slate-500">
-                  我已阅读并同意
-                  <span className="text-blue-600 cursor-pointer hover:underline">《用户协议》</span>
-                  <span className="text-blue-600 cursor-pointer hover:underline">《隐私政策》</span>
-                </span>
-              </label>
-
-              <p className="text-center text-sm text-slate-400">
-                未注册邮箱将自动创建账号
-              </p>
             </div>
-          </div>
 
-          <button
-            onClick={() => navigate('/')}
-            className="mt-6 mx-auto flex items-center gap-2 text-slate-500 hover:text-slate-700 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="text-sm">返回首页</span>
-          </button>
+            {/* 登录按钮 */}
+            <button
+              type="submit"
+              className="submit-btn"
+              disabled={!form.agreed || isLoading}
+            >
+              {isLoading ? '登录中...' : '登录 / 注册'}
+            </button>
+
+            {/* 协议勾选 */}
+            <div className="agreement-item">
+              <input
+                type="checkbox"
+                checked={form.agreed}
+                onChange={(e) => setForm({ ...form, agreed: e.target.checked })}
+                id="agreement"
+                className="agreement-checkbox"
+              />
+              <label htmlFor="agreement" className="agreement-text">
+                我已阅读并同意
+                <a href="#">《用户协议》</a>
+                <a href="#">《隐私政策》</a>
+              </label>
+            </div>
+
+            {/* 底部联系客服 */}
+            <div className="help-text">
+              遇到问题？ <a href="#" className="help-link">联系客服</a>
+            </div>
+          </form>
         </div>
       </div>
     </div>

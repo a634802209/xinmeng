@@ -2,12 +2,14 @@ import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { generateToken, authMiddleware, type AuthRequest } from '../middleware/auth.js'
 import { getUserByEmail, createUser } from '../services/userService.js'
-import { success, error } from '../utils/response.js'
+import { success, error, badRequest, notFound, forbidden } from '../utils/response.js'
 import { validate, loginSchema } from '../utils/validator.js'
 import { trackLoginAttempt } from '../middleware/security.js'
 import { sendVerificationCode, sendPasswordReset, isMailConfigured } from '../services/mailService.js'
 import db from '../db.js'
 import crypto from 'crypto'
+import { setVerifyCode, getVerifyCode, delVerifyCode } from '../utils/redis.js'
+import { sendCodeRateLimit, loginRateLimit } from '../middleware/rateLimit.js'
 
 const router = Router()
 
@@ -40,70 +42,62 @@ function generateCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
-router.post('/send-code', async (req: Request, res: Response): Promise<void> => {
+router.post('/send-code', sendCodeRateLimit, async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    error(res, 'Invalid email', 400)
+    badRequest(res, '邮箱格式不正确')
     return
   }
 
   const code = generateCode()
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
-
-  await db.execute(
-    'INSERT INTO verify_codes (email, code, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE code = ?, expires_at = ?',
-    [email, code, expiresAt, code, expiresAt]
-  )
+  
+  // 存储到Redis，有效期5分钟
+  await setVerifyCode(email, code, 300)
 
   if (isMailConfigured()) {
     try {
       await sendVerificationCode(email, code)
-      success(res, { message: 'Verification code sent' })
+      success(res, { message: '验证码已发送' }, '发送成功')
     } catch (err: any) {
       console.error('[Mail] Failed to send verification code:', err)
-      error(res, 'Failed to send email', 500)
+      error(res, '邮件发送失败', 500, 500)
     }
   } else {
     console.warn('[Mail] SMTP not configured, returning demo code')
-    success(res, { message: 'Verification code sent', demoCode: code })
+    success(res, { message: '验证码已发送', demoCode: code }, '发送成功')
   }
 })
 
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
+router.post('/login', loginRateLimit, async (req: Request, res: Response): Promise<void> => {
   const clientIp = getClientIp(req)
   const fingerprint = getFingerprint(req)
 
   const validation = validate(loginSchema, req.body)
   if (!validation.success) {
     await trackLoginAttempt(clientIp, req.body?.email || null, fingerprint, false)
-    error(res, validation.error, 400)
+    badRequest(res, validation.error)
     return
   }
 
   const { email, code } = validation.data
 
-  const rows = await db.query<any[]>('SELECT * FROM verify_codes WHERE email = ?', [email])
-  const record = rows[0]
+  // 从Redis获取验证码
+  const storedCode = await getVerifyCode(email)
 
-  if (!record) {
+  if (!storedCode) {
     await trackLoginAttempt(clientIp, email, fingerprint, false)
-    error(res, 'Code not found', 400)
+    error(res, '验证码不存在或已过期', 400, 400)
     return
   }
 
-  if (record.code !== code) {
+  if (storedCode !== code) {
     await trackLoginAttempt(clientIp, email, fingerprint, false)
-    error(res, 'Invalid code', 400)
+    error(res, '验证码错误', 400, 400)
     return
   }
 
-  if (new Date(record.expires_at) < new Date()) {
-    await trackLoginAttempt(clientIp, email, fingerprint, false)
-    error(res, 'Code expired', 400)
-    return
-  }
-
-  await db.execute('DELETE FROM verify_codes WHERE email = ?', [email])
+  // 删除已使用的验证码
+  await delVerifyCode(email)
 
   let user = await getUserByEmail(email)
 
@@ -113,7 +107,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
   if (user.isBanned) {
     await trackLoginAttempt(clientIp, email, fingerprint, false)
-    error(res, 'Account is banned', 403)
+    forbidden(res, '账户已被禁用')
     return
   }
 
@@ -134,14 +128,14 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       isMember: user.isMember,
       isAdmin: user.isAdmin,
     },
-  })
+  }, '登录成功')
 })
 
 router.get('/me', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const user = await getUserById(req.user!.id)
 
   if (!user) {
-    error(res, 'User not found', 404)
+    notFound(res, '用户不存在')
     return
   }
 
@@ -157,24 +151,24 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response): Promi
       isMember: user.isMember,
       isAdmin: user.isAdmin,
     },
-  })
+  }, '获取成功')
 })
 
 router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    error(res, 'Invalid email', 400)
+    badRequest(res, '邮箱格式不正确')
     return
   }
 
   const user = await getUserByEmail(email)
   if (!user) {
-    error(res, 'Email not registered', 404)
+    notFound(res, '该邮箱未注册')
     return
   }
 
   if (!isMailConfigured()) {
-    error(res, 'Email service not configured', 503)
+    error(res, '邮件服务未配置', 503, 503)
     return
   }
 
@@ -190,17 +184,17 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
 
   try {
     await sendPasswordReset(email, resetToken, resetUrl)
-    success(res, { message: 'Password reset email sent' })
+    success(res, { message: '密码重置邮件已发送' }, '发送成功')
   } catch (err: any) {
     console.error('[Mail] Failed to send password reset:', err)
-    error(res, 'Failed to send email', 500)
+    error(res, '邮件发送失败', 500, 500)
   }
 })
 
 router.post('/reset-password', async (req: Request, res: Response): Promise<void> => {
   const { token, newPassword } = req.body
   if (!token || !newPassword || newPassword.length < 6) {
-    error(res, 'Invalid token or password too short', 400)
+    badRequest(res, 'Token无效或密码过短')
     return
   }
 
@@ -208,19 +202,19 @@ router.post('/reset-password', async (req: Request, res: Response): Promise<void
   const record = rows[0]
 
   if (!record) {
-    error(res, 'Invalid or expired token', 400)
+    badRequest(res, 'Token无效或已过期')
     return
   }
 
   if (new Date(record.expires_at) < new Date()) {
-    error(res, 'Token expired', 400)
+    badRequest(res, 'Token已过期')
     return
   }
 
   await db.execute('UPDATE users SET password_hash = ? WHERE email = ?', [newPassword, record.email])
   await db.execute('DELETE FROM password_resets WHERE token = ?', [token])
 
-  success(res, { message: 'Password reset successfully' })
+  success(res, { message: '密码重置成功' }, '重置成功')
 })
 
 async function getUserById(userId: number) {

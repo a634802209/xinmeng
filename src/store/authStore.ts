@@ -5,9 +5,10 @@ interface User {
   email: string
   nickname: string
   avatar: string
-  credits: number
+  credits?: number
+  remain_power?: number
   isMember: boolean
-  isAdmin: boolean
+  isAdmin?: boolean
 }
 
 interface AuthState {

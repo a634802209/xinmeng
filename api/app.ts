@@ -30,6 +30,9 @@ import settingsRoutes from './routes/settings.js'
 import galleryRoutes from './routes/gallery.js'
 import communityRoutes from './routes/community.js'
 import uploadRoutes from './routes/upload.js'
+import emailRoutes from './routes/email.js'
+import homeRoutes from './routes/home.js'
+import payRoutes from './routes/pay.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -127,6 +130,9 @@ app.use('/api/settings', settingsRoutes)
 app.use('/api/gallery', galleryRoutes)
 app.use('/api/community', communityRoutes)
 app.use('/api/upload', uploadRoutes)
+app.use('/api/email', emailRoutes)
+app.use('/api/home', homeRoutes)
+app.use('/api/pay', payRoutes)
 
 app.use('/api/health', (_req, res) => {
   res.status(200).json({ success: true, message: 'ok' })

@@ -30,8 +30,8 @@ export default function AdminLogin() {
 
       const data = await res.json()
 
-      if (!data?.success) {
-        setError(data?.error || '登录失败')
+      if (data?.code !== 200) {
+        setError(data?.msg || '登录失败')
         return
       }
 
@@ -51,11 +51,15 @@ export default function AdminLogin() {
         <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
           {/* Header */}
           <div className="bg-slate-900 px-8 py-8 text-center">
-            <div className="w-16 h-16 bg-white/10 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <Shield className="w-8 h-8 text-white" />
+            <div className="w-20 h-20 bg-white/10 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <img 
+                src="/xinmeng-logo.png" 
+                alt="XinMeng AI Logo" 
+                className="h-14 w-auto object-contain" 
+              />
             </div>
             <h1 className="text-xl font-bold text-white">管理后台登录</h1>
-            <p className="text-slate-400 text-sm mt-1"> XinMeng AI 管理系统</p>
+            <p className="text-slate-400 text-sm mt-1">XinMeng AI 管理系统</p>
           </div>
 
           {/* Form */}

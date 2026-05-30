@@ -116,23 +116,27 @@ export default function AdminDashboard() {
         'Content-Type': 'application/json',
       },
     })
-    if (res.status === 401 || res.status === 403) {
-      adminLogout()
-      navigate('/admin-login')
-      return null
+    const data = await res.json()
+    if (data?.code !== 200) {
+      if (data.code === 401 || data.code === 403) {
+        adminLogout()
+        navigate('/admin-login')
+        return null
+      }
+      throw new Error(data.msg || '请求失败')
     }
-    return res.json()
+    return data
   }
 
   const loadStats = async () => {
     const data = await fetchWithAuth(`${API_BASE}/stats`)
-    if (data?.success) setStats(data.stats)
+    if (data) setStats(data.data)
   }
 
   const loadUsers = async () => {
     setLoading(true)
     const data = await fetchWithAuth(`${API_BASE}/users?page=${page}&search=${searchQuery}`)
-    if (data?.success) {
+    if (data) {
       setUsers(data.data.list)
       setTotalPages(data.data.pagination.totalPages)
     }
@@ -142,7 +146,7 @@ export default function AdminDashboard() {
   const loadOrders = async () => {
     setLoading(true)
     const data = await fetchWithAuth(`${API_BASE}/orders?page=${page}`)
-    if (data?.success) {
+    if (data) {
       setOrders(data.data.list)
       setTotalPages(data.data.pagination.totalPages)
     }
@@ -152,7 +156,7 @@ export default function AdminDashboard() {
   const loadWorks = async () => {
     setLoading(true)
     const data = await fetchWithAuth(`${API_BASE}/works?page=${page}`)
-    if (data?.success) {
+    if (data) {
       setWorks(data.data.list)
       setTotalPages(data.data.pagination.totalPages)
     }
@@ -161,7 +165,7 @@ export default function AdminDashboard() {
 
   const loadSettings = async () => {
     const data = await fetchWithAuth(`${API_BASE}/settings`)
-    if (data?.success) {
+    if (data) {
       setSettings(data.data)
       setEditSettings(data.data)
     }
@@ -170,7 +174,7 @@ export default function AdminDashboard() {
   const loadChannels = async () => {
     setLoading(true)
     const data = await fetchWithAuth(`${CHANNEL_API}/`)
-    if (data?.success) {
+    if (data) {
       setChannels(data.data)
     }
     setLoading(false)
@@ -285,7 +289,7 @@ export default function AdminDashboard() {
 
   const handleTestChannel = async (id: number) => {
     const data = await fetchWithAuth(`${CHANNEL_API}/${id}/test`, { method: 'POST' })
-    alert(data?.success ? '连接成功' : `连接失败: ${data?.error}`)
+    alert(data ? '连接成功' : `连接失败`)
     loadChannels()
   }
 
