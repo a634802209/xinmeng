@@ -6,7 +6,7 @@ const router = Router()
 
 router.get('/generate', async (_req, res: Response): Promise<void> => {
   const getSetting = async (key: string, defaultValue: string) => {
-    const [rows] = await db.query<any[]>("SELECT value FROM settings WHERE key = ?", [key])
+    const rows = await db.query<any[]>("SELECT \`value\` FROM settings WHERE \`key\` = ?", [key])
     return rows[0]?.value || defaultValue
   }
 
@@ -58,13 +58,13 @@ router.post('/generate', (_req, res: Response): void => {
 })
 
 router.get('/pricing', async (_req, res: Response): Promise<void> => {
-  const [imageRows] = await db.query<any[]>("SELECT value FROM settings WHERE key = 'image_price'")
+  const imageRows = await db.query<any[]>("SELECT \`value\` FROM settings WHERE \`key\` = 'image_price'")
   const imagePrice = imageRows[0]?.value || '1000'
 
-  const [videoRows] = await db.query<any[]>("SELECT value FROM settings WHERE key = 'video_price'")
+  const videoRows = await db.query<any[]>("SELECT \`value\` FROM settings WHERE \`key\` = 'video_price'")
   const videoPrice = videoRows[0]?.value || '3000'
 
-  const [memberRows] = await db.query<any[]>("SELECT value FROM settings WHERE key = 'member_month_price'")
+  const memberRows = await db.query<any[]>("SELECT \`value\` FROM settings WHERE \`key\` = 'member_month_price'")
   const memberPrice = memberRows[0]?.value || '2900'
 
   res.json({

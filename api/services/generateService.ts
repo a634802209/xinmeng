@@ -35,7 +35,7 @@ export interface GenerateResult {
 }
 
 async function getPrice(key: string): Promise<number> {
-  const [rows] = await db.query<any[]>("SELECT value FROM settings WHERE key = ?", [key])
+  const rows = await db.query<any[]>("SELECT \`value\` FROM settings WHERE \`key\` = ?", [key])
   return parseInt(rows[0]?.value || '0') || (key === 'image_price' ? 10 : 30)
 }
 

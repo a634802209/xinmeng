@@ -185,8 +185,8 @@ export async function initDB(): Promise<void> {
 
     await conn.execute(`
       CREATE TABLE IF NOT EXISTS settings (
-        key VARCHAR(100) PRIMARY KEY,
-        value TEXT NOT NULL,
+        \`key\` VARCHAR(100) PRIMARY KEY,
+        \`value\` TEXT NOT NULL,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
@@ -248,7 +248,7 @@ export async function initDB(): Promise<void> {
     `)
 
     await conn.execute(`
-      INSERT IGNORE INTO settings (key, value) VALUES
+      INSERT IGNORE INTO settings (\`key\`, \`value\`) VALUES
         ('image_price', '10'),
         ('video_price', '30'),
         ('member_month_price', '29'),
