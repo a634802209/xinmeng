@@ -10,7 +10,11 @@ export interface ApiResponse<T = any> {
   data: T
 }
 
+<<<<<<< HEAD
 export async function apiFetch<T = any>(path: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+=======
+export async function apiFetch<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+>>>>>>> eabb14488c26617ad390a6d359b8ff609064cd21
   const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -25,6 +29,7 @@ export async function apiFetch<T = any>(path: string, options: RequestInit = {})
     headers,
   })
 
+<<<<<<< HEAD
   const data = await res.json() as ApiResponse<T>
   
   // 如果状态码不是200，抛出错误
@@ -33,6 +38,15 @@ export async function apiFetch<T = any>(path: string, options: RequestInit = {})
   }
   
   return data
+=======
+  const result: ApiResponse<T> = await res.json()
+  
+  if (result.code !== 0) {
+    throw new Error(result.msg || 'Request failed')
+  }
+  
+  return result.data
+>>>>>>> eabb14488c26617ad390a6d359b8ff609064cd21
 }
 
 export const authApi = {

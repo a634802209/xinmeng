@@ -4,25 +4,42 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 log()  { echo -e "${CYAN}[$(date +%H:%M:%S)]${NC} $1"; }
 ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 err()  { echo -e "${RED}[ERR]${NC} $1"; }
 
-log "=== 新梦AI 多容器部署 ==="
+log "=== 新梦AI 腾讯云部署脚本 ==="
 
+# GitHub 配置
+GITHUB_REPO="https://github.com/a634802209/xinmeng.git"
+GITHUB_BRANCH="main"
+
+# 检查是否为 root 或 sudo
 SUDO=""
 if [ "$EUID" -ne 0 ]; then
     if command -v sudo &>/dev/null; then
         SUDO="sudo"
         ok "使用 sudo 执行需要权限的操作"
     else
-        err "需要 root 权限或 sudo，请安装 sudo: apt-get install sudo"
+        err "需要 root 权限或 sudo，请先执行: apt-get install sudo -y"
         exit 1
     fi
 fi
 
+# 获取服务器公网 IP
+log "获取服务器公网 IP..."
+PUBLIC_IP=$(curl -s icanhazip.com || curl -s ifconfig.me || curl -s ip.sb)
+if [ -z "$PUBLIC_IP" ]; then
+    warn "无法自动获取公网 IP，请手动设置"
+    read -p "请输入服务器公网 IP: " PUBLIC_IP
+fi
+ok "服务器 IP: $PUBLIC_IP"
+
+# 安装 Docker
 if command -v docker &>/dev/null; then
     ok "Docker 已安装: $(docker --version)"
 else
@@ -33,6 +50,7 @@ else
     ok "Docker 安装完成"
 fi
 
+# 检查 Docker Compose
 COMPOSE_CMD=""
 if $SUDO docker compose version &>/dev/null; then
     COMPOSE_CMD="$SUDO docker compose"
@@ -50,45 +68,148 @@ else
     ok "docker-compose 安装完成"
 fi
 
-PROJECT_DIR="$HOME/xinmeng-ai"
-if [ -d "$PROJECT_DIR" ]; then
-    log "清理旧项目..."
+# 项目目录
+PROJECT_DIR="/opt/xinmeng-ai"
+
+# 选择部署方式
+echo ""
+log "选择代码获取方式："
+echo "1) 从 GitHub 克隆（推荐）- 需要配置 GitHub SSH Key"
+echo "2) 使用本地部署包 /opt/deploy.tar.gz"
+echo "3) 使用当前目录（如果已有项目文件）"
+echo ""
+read -p "请选择 (1/2/3, 默认 1): " DEPLOY_METHOD
+DEPLOY_METHOD=${DEPLOY_METHOD:-1}
+
+if [ "$DEPLOY_METHOD" = "1" ]; then
+    # 方式 1: 从 GitHub 克隆
+    log "从 GitHub 克隆代码..."
+    
+    # 安装 git（如果未安装）
+    if ! command -v git &>/dev/null; then
+        log "安装 Git..."
+        $SUDO apt-get update && $SUDO apt-get install -y git
+    fi
+    
+    if [ -d "$PROJECT_DIR" ]; then
+        log "清理旧项目..."
+        cd "$PROJECT_DIR"
+        $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
+        cd /
+        rm -rf "$PROJECT_DIR"
+        ok "旧项目已清理"
+    fi
+    
+    mkdir -p "$PROJECT_DIR"
     cd "$PROJECT_DIR"
-    $COMPOSE_CMD down --rmi all -v 2>/dev/null || true
-    cd /
-    rm -rf "$PROJECT_DIR"
-    ok "旧项目已清理"
+    
+    # 尝试使用 SSH 克隆（如果已配置 SSH key）
+    if [ -f "$HOME/.ssh/id_rsa" ] || [ -f "$HOME/.ssh/id_ed25519" ]; then
+        log "检测到 SSH key，使用 SSH 克隆..."
+        GIT_REPO="git@github.com:a634802209/xinmeng.git"
+    else
+        log "未检测到 SSH key，使用 HTTPS 克隆..."
+        echo ""
+        warn "提示：建议先配置 GitHub SSH Key 以便后续更新部署"
+        echo "配置指南：https://github.com/settings/keys"
+        echo ""
+        GIT_REPO="$GITHUB_REPO"
+    fi
+    
+    log "克隆仓库: $GIT_REPO (branch: $GITHUB_BRANCH)"
+    git clone -b "$GITHUB_BRANCH" "$GIT_REPO" "$PROJECT_DIR"
+    ok "代码克隆完成"
+    
+elif [ "$DEPLOY_METHOD" = "2" ]; then
+    # 方式 2: 使用本地部署包
+    log "使用本地部署包..."
+    
+    if [ ! -f "/opt/deploy.tar.gz" ]; then
+        err "未找到 /opt/deploy.tar.gz，请先上传部署包"
+        exit 1
+    fi
+    
+    if [ -d "$PROJECT_DIR" ]; then
+        log "清理旧项目..."
+        cd "$PROJECT_DIR"
+        $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
+        cd /
+        rm -rf "$PROJECT_DIR"
+    fi
+    
+    mkdir -p "$PROJECT_DIR"
+    tar -xzf /opt/deploy.tar.gz -C "$PROJECT_DIR"
+    ok "部署包解压完成"
+    
+else
+    # 方式 3: 使用当前目录
+    if [ -f "docker-compose.yml" ] && [ -f "package.json" ]; then
+        log "检测到当前目录已包含项目文件"
+        PROJECT_DIR=$(pwd)
+    else
+        err "当前目录不是项目目录，请上传项目文件或选择其他部署方式"
+        exit 1
+    fi
 fi
 
-log "克隆项目代码..."
-mkdir -p "$PROJECT_DIR"
-git clone --depth 1 git@github.com:a634802209/xinmeng.git "$PROJECT_DIR"
 cd "$PROJECT_DIR"
-ok "代码克隆完成"
+ok "工作目录: $PROJECT_DIR"
 
+# 生成密钥
 JWT_SECRET=$(openssl rand -hex 32)
 ADMIN_SECRET=$(openssl rand -hex 32)
 DB_PASSWORD=$(openssl rand -hex 16)
 DB_ROOT_PASSWORD=$(openssl rand -hex 16)
 
-log "配置 SMTP 邮箱服务..."
-echo "请输入 SMTP 配置信息（直接回车跳过配置）："
-read -p "SMTP 服务器地址 (默认 smtp.qq.com): " SMTP_HOST
-read -p "SMTP 端口 (默认 587): " SMTP_PORT
-read -p "SMTP 用户名 (邮箱地址): " SMTP_USER
-read -s -p "SMTP 授权码/密码: " SMTP_PASS
-echo
-read -p "发件人名称 (默认 新梦AI): " SMTP_FROM_NAME
+# 询问域名配置
+echo ""
+read -p "是否已有域名？(y/n, 默认 n): " HAS_DOMAIN
+HAS_DOMAIN=${HAS_DOMAIN:-n}
 
-SMTP_HOST=${SMTP_HOST:-smtp.qq.com}
-SMTP_PORT=${SMTP_PORT:-587}
-SMTP_FROM_NAME=${SMTP_FROM_NAME:-新梦AI}
-SMTP_FROM=${SMTP_USER:-noreply@xinmeng.ai}
+DOMAIN=""
+FRONTEND_URL="http://${PUBLIC_IP}"
 
+if [ "$HAS_DOMAIN" = "y" ] || [ "$HAS_DOMAIN" = "Y" ]; then
+    read -p "请输入域名 (例如: xinmeng.ai): " DOMAIN
+    if [ -n "$DOMAIN" ]; then
+        FRONTEND_URL="https://${DOMAIN}"
+    fi
+fi
+
+# SMTP 配置
+echo ""
+log "配置 SMTP 邮箱服务（用于发送验证码）..."
+echo "提示：如果使用 QQ 邮箱，需要在 QQ 邮箱设置中开启 SMTP 服务并获取授权码"
+echo ""
+
+read -p "是否配置 SMTP 服务？(y/n, 默认 n): " CONFIG_SMTP
+CONFIG_SMTP=${CONFIG_SMTP:-n}
+
+SMTP_HOST="smtp.qq.com"
+SMTP_PORT="587"
+SMTP_USER=""
+SMTP_PASS=""
+SMTP_FROM="noreply@xinmeng.ai"
+
+if [ "$CONFIG_SMTP" = "y" ] || [ "$CONFIG_SMTP" = "Y" ]; then
+    read -p "SMTP 服务器地址 (默认 smtp.qq.com): " input_smtp_host
+    read -p "SMTP 端口 (默认 587): " input_smtp_port
+    read -p "SMTP 用户名 (邮箱地址): " SMTP_USER
+    read -s -p "SMTP 授权码/密码: " SMTP_PASS
+    echo
+    read -p "发件人邮箱 (默认同用户名): " input_smtp_from
+
+    SMTP_HOST=${input_smtp_host:-smtp.qq.com}
+    SMTP_PORT=${input_smtp_port:-587}
+    SMTP_FROM=${input_smtp_from:-${SMTP_USER}}
+fi
+
+# 生成 .env 文件
+log "生成环境配置..."
 cat > .env << EOF
 NODE_ENV=production
 PORT=3001
-HOST_IP=129.204.225.231
+HOST_IP=${PUBLIC_IP}
 
 JWT_SECRET=${JWT_SECRET}
 ADMIN_JWT_SECRET=${ADMIN_SECRET}
@@ -103,7 +224,7 @@ DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
 REDIS_HOST=xinmeng-ai-redis
 REDIS_PORT=6379
 
-FRONTEND_URL=http://129.204.225.231
+FRONTEND_URL=${FRONTEND_URL}
 
 SMTP_HOST=${SMTP_HOST}
 SMTP_PORT=${SMTP_PORT}
@@ -114,62 +235,71 @@ SITE_NAME=新梦AI
 EOF
 ok "环境变量已写入 .env"
 
-log "Docker 构建中（首次约 5-10 分钟）..."
+# 构建并启动
+log "开始 Docker 构建与部署（首次约 5-10 分钟）..."
 $COMPOSE_CMD up -d --build
 
-log "等待 MySQL 初始化完成（首次约 30-60 秒）..."
-for i in $(seq 1 60); do
+# 等待服务启动
+log "等待 MySQL 初始化..."
+for i in $(seq 1 90); do
     if $COMPOSE_CMD exec -T xinmeng-ai-mysql mysqladmin ping -h localhost -u root -p${DB_ROOT_PASSWORD} &>/dev/null 2>&1; then
         ok "MySQL 就绪"
         break
     fi
-    if [ "$i" -eq 60 ]; then
-        err "MySQL 初始化超时，查看日志："
-        $COMPOSE_CMD logs --tail=30 xinmeng-ai-mysql
+    if [ "$i" -eq 90 ]; then
+        err "MySQL 初始化超时"
+        $COMPOSE_CMD logs --tail=50 xinmeng-ai-mysql
     fi
     sleep 2
 done
 
-log "测试数据库用户连接..."
-sleep 3
-if $COMPOSE_CMD exec -T xinmeng-ai-mysql mysql -u xinmeng -p${DB_PASSWORD} -e "SELECT 1" xinmeng &>/dev/null; then
-    ok "数据库用户连接成功"
-else
-    err "数据库用户连接失败，检查密码配置"
-    $COMPOSE_CMD logs --tail=20 xinmeng-ai-mysql
-    exit 1
-fi
+log "等待后端服务..."
+sleep 10
 
-log "等待服务就绪..."
+log "等待前端服务..."
 for i in $(seq 1 60); do
     if curl -sf http://localhost/health > /dev/null 2>&1; then
-        ok "服务启动成功"
+        ok "服务启动成功！"
         break
     fi
     if [ "$i" -eq 60 ]; then
-        err "服务未就绪，查看日志："
-        $COMPOSE_CMD logs --tail=50
+        err "服务未就绪，请检查日志"
+        $COMPOSE_CMD logs --tail=100
         exit 1
     fi
     sleep 2
 done
 
+# 完成
 echo ""
 echo -e "${GREEN}============================================${NC}"
-echo -e "${GREEN}  多容器部署成功！${NC}"
-echo -e "${GREEN}  访问: http://129.204.225.231${NC}"
-echo -e "${GREEN}  管理员: admin / xinmeng2024${NC}"
+echo -e "${GREEN}  🎉 部署成功！${NC}"
 echo -e "${GREEN}============================================${NC}"
 echo ""
-echo "服务清单："
-echo "  xinmeng-ai-frontend    - 前端 (Nginx, :80) [frontend-network]"
-echo "  xinmeng-ai-backend     - 后端 (Node.js, :3001) [backend-network + frontend-network]"
-echo "  xinmeng-ai-mysql       - 数据库 (MySQL, :3306) [backend-network]"
-echo "  xinmeng-ai-redis       - 缓存 (Redis, :6379) [backend-network]"
+echo "📱 访问地址："
+echo "   ${FRONTEND_URL}"
 echo ""
-echo "常用命令："
-echo "  查看所有容器: ${COMPOSE_CMD} ps"
-echo "  查看日志: ${COMPOSE_CMD} logs -f"
-echo "  重启: ${COMPOSE_CMD} restart"
-echo "  停止: ${COMPOSE_CMD} down"
-echo "  查看数据库数据: ${COMPOSE_CMD} exec xinmeng-ai-mysql mysql -u xinmeng -p${DB_PASSWORD} xinmeng"
+if [ -n "$DOMAIN" ]; then
+    echo "💡 提示：请确保域名 DNS 已解析到 ${PUBLIC_IP}"
+    echo "   如需配置 HTTPS，请参考 DEPLOY.md"
+    echo ""
+fi
+echo "👤 默认管理员账号："
+echo "   用户名: admin"
+echo "   密码: xinmeng2024"
+echo ""
+echo "🐳 运行中的容器："
+$COMPOSE_CMD ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+echo ""
+echo "🛠️  常用命令："
+echo "   查看日志:   cd $PROJECT_DIR && $COMPOSE_CMD logs -f"
+echo "   重启服务:   cd $PROJECT_DIR && $COMPOSE_CMD restart"
+echo "   停止服务:   cd $PROJECT_DIR && $COMPOSE_CMD down"
+echo "   更新代码:   cd $PROJECT_DIR && git pull && $COMPOSE_CMD up -d --build"
+echo "   进入数据库: cd $PROJECT_DIR && $COMPOSE_CMD exec xinmeng-ai-mysql mysql -u xinmeng -p${DB_PASSWORD} xinmeng"
+echo ""
+echo "💾 数据持久化位置："
+echo "   数据库: Docker volume (mysql-data)"
+echo "   Redis:    Docker volume (redis-data)"
+echo ""
+echo -e "${GREEN}============================================${NC}"

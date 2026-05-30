@@ -109,14 +109,17 @@ export async function initDB(): Promise<void> {
       CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
+        username VARCHAR(50) UNIQUE,
         nickname VARCHAR(255),
         avatar VARCHAR(500),
         credits INT DEFAULT 0,
         remain_power INT DEFAULT 0,
+        balance DECIMAL(10,4) NOT NULL DEFAULT 0.0000,
         is_member INT DEFAULT 0,
         member_expire_at DATETIME,
         is_admin INT DEFAULT 0,
         is_banned INT DEFAULT 0,
+        status ENUM('active','disabled') NOT NULL DEFAULT 'active',
         storage_used INT DEFAULT 0,
         storage_limit INT DEFAULT 104857600,
         password_hash VARCHAR(255),
@@ -201,6 +204,49 @@ export async function initDB(): Promise<void> {
         \`key\` VARCHAR(100) PRIMARY KEY,
         \`value\` TEXT NOT NULL,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `)
+
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        \`key\` VARCHAR(64) NOT NULL UNIQUE,
+        name VARCHAR(50) NOT NULL,
+        status ENUM('active','disabled') NOT NULL DEFAULT 'active',
+        expire_at DATETIME NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `)
+
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS models (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(50) NOT NULL UNIQUE,
+        base_url VARCHAR(255) NOT NULL,
+        api_key VARCHAR(255) NOT NULL,
+        input_price DECIMAL(10,6) NOT NULL,
+        output_price DECIMAL(10,6) NOT NULL,
+        status ENUM('active','disabled') NOT NULL DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `)
+
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS usage_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        api_key_id INT NOT NULL,
+        model_id INT NOT NULL,
+        input_tokens INT NOT NULL DEFAULT 0,
+        output_tokens INT NOT NULL DEFAULT 0,
+        total_cost DECIMAL(10,4) NOT NULL DEFAULT 0.0000,
+        request_id VARCHAR(64) NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (api_key_id) REFERENCES api_keys(id),
+        FOREIGN KEY (model_id) REFERENCES models(id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
 

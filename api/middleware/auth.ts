@@ -20,7 +20,7 @@ export interface AuthRequest extends Request {
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ success: false, error: 'Unauthorized' })
+    res.status(401).json({ code: 401, msg: 'Unauthorized', data: null })
     return
   }
 
@@ -30,7 +30,7 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
     req.user = decoded
     next()
   } catch {
-    res.status(401).json({ success: false, error: 'Invalid token' })
+    res.status(401).json({ code: 401, msg: 'Invalid token', data: null })
     return
   }
 }
@@ -38,7 +38,7 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
 export async function authMiddlewareWithBanCheck(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ success: false, error: 'Unauthorized' })
+    res.status(401).json({ code: 401, msg: 'Unauthorized', data: null })
     return
   }
 
@@ -49,14 +49,14 @@ export async function authMiddlewareWithBanCheck(req: AuthRequest, res: Response
     const rows = await db.query<any[]>('SELECT is_banned FROM users WHERE id = ?', [decoded.id])
     const user = rows[0]
     if (!user || user.is_banned) {
-      res.status(403).json({ success: false, error: 'Account is banned' })
+      res.status(403).json({ code: 403, msg: 'Account is banned', data: null })
       return
     }
 
     req.user = decoded
     next()
   } catch {
-    res.status(401).json({ success: false, error: 'Invalid token' })
+    res.status(401).json({ code: 401, msg: 'Invalid token', data: null })
     return
   }
 }
