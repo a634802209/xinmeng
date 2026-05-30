@@ -95,7 +95,7 @@ SMTP_PORT=587
 SMTP_USER=your-email@qq.com
 SMTP_PASS=your-smtp-auth-code
 SMTP_FROM=noreply@xinmeng.ai
-SITE_NAME=XinMeng.ai
+SITE_NAME=新梦AI
 EOF
 ok "环境变量已写入 .env"
 

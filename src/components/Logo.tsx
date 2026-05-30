@@ -56,7 +56,7 @@ export default function Logo({ className = '' }: { className?: string }) {
       </svg>
 
       {/* 文字 */}
-      <span className="text-base font-medium text-slate-800 tracking-tight">XinMeng</span>
+      <span className="text-base font-medium text-slate-800 tracking-tight">新梦</span>
       <span className="text-base font-bold bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">
         AI
       </span>
