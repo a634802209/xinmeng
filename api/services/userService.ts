@@ -12,7 +12,7 @@ export interface UserProfile {
 }
 
 export async function getUserById(userId: number): Promise<UserProfile | undefined> {
-  const [rows] = await db.query<any[]>('SELECT * FROM users WHERE id = ?', [userId])
+  const rows = await db.query<any[]>('SELECT * FROM users WHERE id = ?', [userId])
   const user = rows[0]
 
   if (!user) return undefined
@@ -30,7 +30,7 @@ export async function getUserById(userId: number): Promise<UserProfile | undefin
 }
 
 export async function getUserByEmail(email: string): Promise<UserProfile | undefined> {
-  const [rows] = await db.query<any[]>('SELECT * FROM users WHERE email = ?', [email])
+  const rows = await db.query<any[]>('SELECT * FROM users WHERE email = ?', [email])
   const user = rows[0]
 
   if (!user) return undefined
@@ -64,14 +64,14 @@ export async function addCreditRecord(userId: number, type: string, amount: numb
 }
 
 export async function getUsageStats(userId: number) {
-  const [todayRows] = await db.query<any[]>(
-    "SELECT COUNT(*) as count FROM generate_tasks WHERE user_id = ? AND date(created_at) = date('now')",
+  const todayRows = await db.query<any[]>(
+    "SELECT COUNT(*) as count FROM generate_tasks WHERE user_id = ? AND DATE(created_at) = CURDATE()",
     [userId]
   )
   const todayCount = todayRows[0].count
 
-  const [monthRows] = await db.query<any[]>(
-    "SELECT COUNT(*) as count FROM generate_tasks WHERE user_id = ? AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')",
+  const monthRows = await db.query<any[]>(
+    "SELECT COUNT(*) as count FROM generate_tasks WHERE user_id = ? AND DATE_FORMAT(created_at, '%Y-%m') = DATE_FORMAT(NOW(), '%Y-%m')",
     [userId]
   )
   const monthCount = monthRows[0].count

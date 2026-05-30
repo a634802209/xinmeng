@@ -46,7 +46,7 @@ export async function authMiddlewareWithBanCheck(req: AuthRequest, res: Response
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string; isAdmin?: boolean }
 
-    const [rows] = await db.query<any[]>('SELECT is_banned FROM users WHERE id = ?', [decoded.id])
+    const rows = await db.query<any[]>('SELECT is_banned FROM users WHERE id = ?', [decoded.id])
     const user = rows[0]
     if (!user || user.is_banned) {
       res.status(403).json({ success: false, error: 'Account is banned' })

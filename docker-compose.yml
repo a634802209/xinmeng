@@ -56,6 +56,8 @@ services:
       DB_USER: xinmeng
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: xinmeng
+      DB_ROOT_USER: root
+      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       REDIS_HOST: xinmeng-ai-redis
       REDIS_PORT: 6379
       SMTP_HOST: ${SMTP_HOST}

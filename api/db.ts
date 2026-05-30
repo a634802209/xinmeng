@@ -5,6 +5,8 @@ const DB_PORT = parseInt(process.env.DB_PORT || '3306')
 const DB_USER = process.env.DB_USER
 const DB_PASSWORD = process.env.DB_PASSWORD
 const DB_NAME = process.env.DB_NAME || 'xinmeng'
+const DB_ROOT_USER = process.env.DB_ROOT_USER || 'root'
+const DB_ROOT_PASSWORD = process.env.DB_ROOT_PASSWORD
 
 if (!DB_USER) {
   throw new Error('[DB] DB_USER environment variable is required')
@@ -86,11 +88,16 @@ export async function initDB(): Promise<void> {
     const initConn = await mysql.createConnection({
       host: DB_HOST,
       port: DB_PORT,
-      user: DB_USER,
-      password: DB_PASSWORD,
+      user: DB_ROOT_USER,
+      password: DB_ROOT_PASSWORD,
     })
 
     await initConn.execute(`CREATE DATABASE IF NOT EXISTS ${DB_NAME}`)
+    
+    await initConn.execute(`CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_PASSWORD}'`)
+    await initConn.execute(`GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'%'`)
+    await initConn.execute(`FLUSH PRIVILEGES`)
+    
     await initConn.end()
 
     const conn = await getConnection()

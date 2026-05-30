@@ -46,7 +46,7 @@ export async function adminAuthMiddlewareWithCheck(req: AdminAuthRequest, res: R
   try {
     const decoded = jwt.verify(token, ADMIN_JWT_SECRET) as { id: number; username: string; role: string }
 
-    const [rows] = await db.query<any[]>('SELECT id, username, role, is_active FROM admin_accounts WHERE id = ?', [decoded.id])
+    const rows = await db.query<any[]>('SELECT id, username, role, is_active FROM admin_accounts WHERE id = ?', [decoded.id])
     const admin = rows[0]
 
     if (!admin || !admin.is_active) {

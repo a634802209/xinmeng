@@ -7,7 +7,7 @@ import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 const router = Router()
 
 router.get('/', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT id, name, type, base_url, model, priority, is_active, weight, success_count, fail_count, last_used_at, created_at FROM api_channels ORDER BY priority DESC, created_at ASC'
   )
 
@@ -21,7 +21,7 @@ router.get('/', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response
 })
 
 router.get('/:id', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT id, name, type, base_url, model, priority, is_active, weight, success_count, fail_count, last_used_at, created_at FROM api_channels WHERE id = ?',
     [req.params.id]
   )
@@ -66,7 +66,7 @@ router.put('/:id', adminAuthMiddleware, async (req: AdminAuthRequest, res: Respo
   const channelId = parseInt(req.params.id)
   const { name, type, base_url, api_key, model, priority, weight, is_active } = req.body
 
-  const [rows] = await db.query<any[]>('SELECT id FROM api_channels WHERE id = ?', [channelId])
+  const rows = await db.query<any[]>('SELECT id FROM api_channels WHERE id = ?', [channelId])
   if (!rows[0]) {
     res.status(404).json({ success: false, error: 'Channel not found' })
     return
@@ -102,7 +102,7 @@ router.put('/:id', adminAuthMiddleware, async (req: AdminAuthRequest, res: Respo
 router.delete('/:id', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const channelId = parseInt(req.params.id)
 
-  const [rows] = await db.query<any[]>('SELECT id FROM api_channels WHERE id = ?', [channelId])
+  const rows = await db.query<any[]>('SELECT id FROM api_channels WHERE id = ?', [channelId])
   if (!rows[0]) {
     res.status(404).json({ success: false, error: 'Channel not found' })
     return
@@ -120,7 +120,7 @@ router.delete('/:id', adminAuthMiddleware, async (req: AdminAuthRequest, res: Re
 router.post('/:id/test', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const channelId = parseInt(req.params.id)
 
-  const [rows] = await db.query<any[]>('SELECT * FROM api_channels WHERE id = ?', [channelId])
+  const rows = await db.query<any[]>('SELECT * FROM api_channels WHERE id = ?', [channelId])
   const channel = rows[0]
 
   if (!channel) {
@@ -163,7 +163,7 @@ router.post('/:id/test', adminAuthMiddleware, async (req: AdminAuthRequest, res:
 
 router.get('/available/:type', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const type = req.params.type
-  const [rows] = await db.query<any[]>(
+  const rows = await db.query<any[]>(
     'SELECT id, name, base_url, api_key, model, weight FROM api_channels WHERE type = ? AND is_active = 1 ORDER BY priority DESC',
     [type]
   )

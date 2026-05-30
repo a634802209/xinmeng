@@ -23,10 +23,10 @@ export async function getCreditRecords(userId: number, options: { page?: number;
     params.push(type)
   }
 
-  const [countRows] = await db.query<any[]>(`SELECT COUNT(*) as count FROM credit_records ${whereClause}`, params)
+  const countRows = await db.query<any[]>(`SELECT COUNT(*) as count FROM credit_records ${whereClause}`, params)
   const total = countRows[0].count
 
-  const [records] = await db.query<any[]>(
+  const records = await db.query<any[]>(
     `SELECT id, type, amount, balance, description, created_at
      FROM credit_records
      ${whereClause}
@@ -42,19 +42,19 @@ export async function getCreditRecords(userId: number, options: { page?: number;
 }
 
 export async function getCreditStats(userId: number) {
-  const [rechargeRows] = await db.query<any[]>(
+  const rechargeRows = await db.query<any[]>(
     "SELECT COALESCE(SUM(amount), 0) as total FROM credit_records WHERE user_id = ? AND type = 'recharge'",
     [userId]
   )
   const totalRecharge = rechargeRows[0].total
 
-  const [consumeRows] = await db.query<any[]>(
+  const consumeRows = await db.query<any[]>(
     "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM credit_records WHERE user_id = ? AND type = 'consume'",
     [userId]
   )
   const totalConsume = consumeRows[0].total
 
-  const [userRows] = await db.query<any[]>('SELECT credits FROM users WHERE id = ?', [userId])
+  const userRows = await db.query<any[]>('SELECT credits FROM users WHERE id = ?', [userId])
   const currentBalance = userRows[0]?.credits || 0
 
   return { totalRecharge, totalConsume, currentBalance }

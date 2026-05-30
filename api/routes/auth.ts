@@ -224,7 +224,7 @@ router.post('/reset-password', async (req: Request, res: Response): Promise<void
 })
 
 async function getUserById(userId: number) {
-  const [rows] = await db.query<any[]>('SELECT email FROM users WHERE id = ?', [userId])
+  const rows = await db.query<any[]>('SELECT email FROM users WHERE id = ?', [userId])
   const email = rows[0]?.email
   if (!email) return undefined
   return await getUserByEmail(email)
