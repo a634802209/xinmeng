@@ -394,10 +394,10 @@ export function initDB() {
     -- Insert default admin account (username: admin, password: xinmeng2024)
     -- Password hash for 'xinmeng2024' using bcrypt (generated with bcrypt.hash('xinmeng2024', 10))
     INSERT OR IGNORE INTO admin_accounts (id, username, password_hash, role) VALUES
-      (1, 'admin', '$2b$10$1nwRnV1pgfB74ffzonh3Ke2xnYQqHmjUVYbZ4/UJH8u714HcgBrpq', 'superadmin');
+      (1, 'admin', '$2b$10$lyOBawLdSpX3P582fiM4P.3dKhATV1DXWtI7Beqcczqy7NYpFhWRS', 'superadmin');
 
     -- Update password hash if account exists but hash is wrong
-    UPDATE admin_accounts SET password_hash = '$2b$10$1nwRnV1pgfB74ffzonh3Ke2xnYQqHmjUVYbZ4/UJH8u714HcgBrpq' WHERE username = 'admin';
+    UPDATE admin_accounts SET password_hash = '$2b$10$lyOBawLdSpX3P582fiM4P.3dKhATV1DXWtI7Beqcczqy7NYpFhWRS' WHERE username = 'admin';
 
     INSERT OR IGNORE INTO settings (key, value) VALUES
       ('image_price', '1000'),

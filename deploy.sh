@@ -88,6 +88,14 @@ JWT_SECRET=${JWT_SECRET}
 ADMIN_JWT_SECRET=${ADMIN_SECRET}
 FRONTEND_URL=http://129.204.225.231
 DB_PATH=/app/data/app.db
+
+# SMTP Email Configuration (configure your own SMTP server)
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=587
+SMTP_USER=your-email@qq.com
+SMTP_PASS=your-smtp-auth-code
+SMTP_FROM=noreply@xinmeng.ai
+SITE_NAME=XinMeng.ai
 EOF
 ok "环境变量已写入 .env"
 
