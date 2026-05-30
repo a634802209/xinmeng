@@ -29,7 +29,7 @@ fi
 echo "📥 克隆 GitHub 仓库..."
 mkdir -p "$PROJECT_DIR"
 cd "$PROJECT_DIR"
-git clone https://github.com/a634802209/xinmeng.git "$PROJECT_DIR"
+git clone git@github.com:a634802209/xinmeng.git "$PROJECT_DIR"
 cd "$PROJECT_DIR"
 echo "✅ 代码克隆完成"
 
