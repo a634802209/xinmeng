@@ -11,19 +11,9 @@ export interface UserProfile {
   isBanned: boolean
 }
 
-export function getUserById(userId: number): UserProfile | undefined {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as
-    | {
-        id: number
-        email: string
-        nickname: string | null
-        avatar: string | null
-        credits: number
-        is_member: number
-        is_admin: number
-        is_banned: number
-      }
-    | undefined
+export async function getUserById(userId: number): Promise<UserProfile | undefined> {
+  const [rows] = await db.query<any[]>('SELECT * FROM users WHERE id = ?', [userId])
+  const user = rows[0]
 
   if (!user) return undefined
 
@@ -39,19 +29,9 @@ export function getUserById(userId: number): UserProfile | undefined {
   }
 }
 
-export function getUserByEmail(email: string): UserProfile | undefined {
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as
-    | {
-        id: number
-        email: string
-        nickname: string | null
-        avatar: string | null
-        credits: number
-        is_member: number
-        is_admin: number
-        is_banned: number
-      }
-    | undefined
+export async function getUserByEmail(email: string): Promise<UserProfile | undefined> {
+  const [rows] = await db.query<any[]>('SELECT * FROM users WHERE email = ?', [email])
+  const user = rows[0]
 
   if (!user) return undefined
 
@@ -67,42 +47,43 @@ export function getUserByEmail(email: string): UserProfile | undefined {
   }
 }
 
-export function createUser(email: string, nickname: string, avatar: string): UserProfile {
-  const result = db.prepare('INSERT INTO users (email, nickname, avatar) VALUES (?, ?, ?)').run(email, nickname, avatar)
-  return getUserById(Number(result.lastInsertRowid))!
+export async function createUser(email: string, nickname: string, avatar: string): Promise<UserProfile> {
+  const result = await db.execute('INSERT INTO users (email, nickname, avatar) VALUES (?, ?, ?)', [email, nickname, avatar])
+  return getUserById(Number(result.insertId))!
 }
 
-export function updateUserCredits(userId: number, credits: number): void {
-  db.prepare('UPDATE users SET credits = ? WHERE id = ?').run(credits, userId)
+export async function updateUserCredits(userId: number, credits: number): Promise<void> {
+  await db.execute('UPDATE users SET credits = ? WHERE id = ?', [credits, userId])
 }
 
-export function addCreditRecord(userId: number, type: string, amount: number, balance: number, description?: string): void {
-  db.prepare(
-    'INSERT INTO credit_records (user_id, type, amount, balance, description) VALUES (?, ?, ?, ?, ?)'
-  ).run(userId, type, amount, balance, description || null)
+export async function addCreditRecord(userId: number, type: string, amount: number, balance: number, description?: string): Promise<void> {
+  await db.execute(
+    'INSERT INTO credit_records (user_id, type, amount, balance, description) VALUES (?, ?, ?, ?, ?)',
+    [userId, type, amount, balance, description || null]
+  )
 }
 
-export function getUsageStats(userId: number) {
-  const todayCount = db
-    .prepare(
-      "SELECT COUNT(*) as count FROM generate_tasks WHERE user_id = ? AND date(created_at) = date('now')"
-    )
-    .get(userId) as { count: number }
+export async function getUsageStats(userId: number) {
+  const [todayRows] = await db.query<any[]>(
+    "SELECT COUNT(*) as count FROM generate_tasks WHERE user_id = ? AND date(created_at) = date('now')",
+    [userId]
+  )
+  const todayCount = todayRows[0].count
 
-  const monthCount = db
-    .prepare(
-      "SELECT COUNT(*) as count FROM generate_tasks WHERE user_id = ? AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
-    )
-    .get(userId) as { count: number }
+  const [monthRows] = await db.query<any[]>(
+    "SELECT COUNT(*) as count FROM generate_tasks WHERE user_id = ? AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')",
+    [userId]
+  )
+  const monthCount = monthRows[0].count
 
   const totalQuota = 100000
-  const usedQuota = (monthCount.count || 0) * 350
+  const usedQuota = (monthCount || 0) * 350
   const remainingQuota = Math.max(0, totalQuota - usedQuota)
 
   return {
     remainingQuota,
     totalQuota,
-    todayUsage: (todayCount.count || 0) * 350,
+    todayUsage: (todayCount || 0) * 350,
     monthUsage: usedQuota,
     todayChange: 12,
     monthChange: -8,

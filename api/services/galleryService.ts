@@ -42,11 +42,11 @@ export function getCategories(): string[] {
   return CATEGORIES
 }
 
-export function getGalleryWorks(filter: GalleryFilter = {}): {
+export async function getGalleryWorks(filter: GalleryFilter = {}): Promise<{
   works: GalleryWork[]
   total: number
   hasMore: boolean
-} {
+}> {
   const { type, category, sort = 'latest', page = 1, limit = 20 } = filter
 
   let whereClause = 'WHERE w.is_public = 1 AND w.status = \'completed\''
@@ -66,15 +66,12 @@ export function getGalleryWorks(filter: GalleryFilter = {}): {
     ? 'ORDER BY w.likes_count DESC, w.created_at DESC'
     : 'ORDER BY w.created_at DESC'
 
-  const countResult = db
-    .prepare(`SELECT COUNT(*) as total FROM works w ${whereClause}`)
-    .get(...params) as { total: number }
+  const [countRows] = await db.query<any[]>(`SELECT COUNT(*) as total FROM works w ${whereClause}`, params)
+  const countResult = countRows[0]
 
   const offset = (page - 1) * limit
-  params.push(limit, offset)
-
-  const works = db
-    .prepare(`
+  const [workRows] = await db.query<any[]>(
+    `
       SELECT
         w.id,
         w.user_id as userId,
@@ -94,22 +91,11 @@ export function getGalleryWorks(filter: GalleryFilter = {}): {
       ${whereClause}
       ${orderBy}
       LIMIT ? OFFSET ?
-    `)
-    .all(...params) as Array<{
-      id: number
-      userId: number
-      userName: string
-      userAvatar: string | null
-      type: string
-      prompt: string
-      resultUrl: string
-      thumbnailUrl: string
-      status: string
-      isPublic: number
-      likesCount: number
-      category: string | null
-      createdAt: string
-    }>
+    `,
+    [...params, limit, offset]
+  )
+
+  const works = workRows
 
   return {
     works: works.map((w) => ({
@@ -132,14 +118,14 @@ export function getGalleryWorks(filter: GalleryFilter = {}): {
   }
 }
 
-export function likeWork(workId: number): boolean {
-  const result = db.prepare('UPDATE works SET likes_count = likes_count + 1 WHERE id = ?').run(workId)
-  return result.changes > 0
+export async function likeWork(workId: number): Promise<boolean> {
+  const result = await db.execute('UPDATE works SET likes_count = likes_count + 1 WHERE id = ?', [workId])
+  return result.affectedRows > 0
 }
 
-export function getWorkById(workId: number): GalleryWork | null {
-  const work = db
-    .prepare(`
+export async function getWorkById(workId: number): Promise<GalleryWork | null> {
+  const [rows] = await db.query<any[]>(
+    `
       SELECT
         w.id,
         w.user_id as userId,
@@ -157,22 +143,10 @@ export function getWorkById(workId: number): GalleryWork | null {
       FROM works w
       LEFT JOIN users u ON w.user_id = u.id
       WHERE w.id = ?
-    `)
-    .get(workId) as {
-      id: number
-      userId: number
-      userName: string
-      userAvatar: string | null
-      type: string
-      prompt: string
-      resultUrl: string
-      thumbnailUrl: string
-      status: string
-      isPublic: number
-      likesCount: number
-      category: string | null
-      createdAt: string
-    } | undefined
+    `,
+    [workId]
+  )
+  const work = rows[0]
 
   if (!work) return null
 

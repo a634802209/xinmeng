@@ -9,13 +9,14 @@ export interface Feedback {
   createdAt: string
 }
 
-export function createFeedback(userId: number, type: string, content: string, contact?: string): Feedback {
-  const result = db.prepare(
-    'INSERT INTO feedbacks (user_id, type, content, contact) VALUES (?, ?, ?, ?)'
-  ).run(userId, type, content, contact || null)
+export async function createFeedback(userId: number, type: string, content: string, contact?: string): Promise<Feedback> {
+  const result = await db.execute(
+    'INSERT INTO feedbacks (user_id, type, content, contact) VALUES (?, ?, ?, ?)',
+    [userId, type, content, contact || null]
+  )
 
   return {
-    id: Number(result.lastInsertRowid),
+    id: Number(result.insertId),
     type,
     content,
     contact: contact || null,
@@ -24,17 +25,11 @@ export function createFeedback(userId: number, type: string, content: string, co
   }
 }
 
-export function getFeedbacks(userId: number): Feedback[] {
-  const rows = db.prepare(
-    'SELECT id, type, content, contact, status, created_at FROM feedbacks WHERE user_id = ? ORDER BY created_at DESC'
-  ).all(userId) as Array<{
-    id: number
-    type: string
-    content: string
-    contact: string | null
-    status: string
-    created_at: string
-  }>
+export async function getFeedbacks(userId: number): Promise<Feedback[]> {
+  const [rows] = await db.query<any[]>(
+    'SELECT id, type, content, contact, status, created_at FROM feedbacks WHERE user_id = ? ORDER BY created_at DESC',
+    [userId]
+  )
 
   return rows.map((r) => ({
     id: r.id,

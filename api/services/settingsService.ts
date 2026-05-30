@@ -8,21 +8,12 @@ export interface UserSettings {
   autoSave: boolean
 }
 
-export function getUserSettings(userId: number): UserSettings {
-  const row = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as
-    | {
-        theme: string
-        language: string
-        notify_email: number
-        notify_push: number
-        auto_save: number
-      }
-    | undefined
+export async function getUserSettings(userId: number): Promise<UserSettings> {
+  const [rows] = await db.query<any[]>('SELECT * FROM user_settings WHERE user_id = ?', [userId])
+  const row = rows[0]
 
   if (!row) {
-    db.prepare(
-      'INSERT INTO user_settings (user_id) VALUES (?)'
-    ).run(userId)
+    await db.execute('INSERT INTO user_settings (user_id) VALUES (?)', [userId])
     return {
       theme: 'light',
       language: 'zh',
@@ -41,11 +32,11 @@ export function getUserSettings(userId: number): UserSettings {
   }
 }
 
-export function updateUserSettings(userId: number, settings: Partial<UserSettings>): void {
-  const current = getUserSettings(userId)
+export async function updateUserSettings(userId: number, settings: Partial<UserSettings>): Promise<void> {
+  const current = await getUserSettings(userId)
   const merged = { ...current, ...settings }
 
-  db.prepare(
+  await db.execute(
     `INSERT INTO user_settings (user_id, theme, language, notify_email, notify_push, auto_save)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
@@ -54,13 +45,14 @@ export function updateUserSettings(userId: number, settings: Partial<UserSetting
        notify_email = excluded.notify_email,
        notify_push = excluded.notify_push,
        auto_save = excluded.auto_save,
-       updated_at = CURRENT_TIMESTAMP`
-  ).run(
-    userId,
-    merged.theme,
-    merged.language,
-    merged.notifyEmail ? 1 : 0,
-    merged.notifyPush ? 1 : 0,
-    merged.autoSave ? 1 : 0
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      userId,
+      merged.theme,
+      merged.language,
+      merged.notifyEmail ? 1 : 0,
+      merged.notifyPush ? 1 : 0,
+      merged.autoSave ? 1 : 0,
+    ]
   )
 }

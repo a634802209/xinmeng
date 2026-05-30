@@ -4,34 +4,24 @@ import db from '../db.js'
 
 const router = Router()
 
-// 获取生成配置（模型、尺寸、清晰度等）- 动态从数据库/设置读取
-router.get('/generate', (_req, res: Response): void => {
-  // 从 settings 表读取配置，如果没有则使用默认值
-  const getSetting = (key: string, defaultValue: string) => {
-    const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined
-    return row?.value || defaultValue
+router.get('/generate', async (_req, res: Response): Promise<void> => {
+  const getSetting = async (key: string, defaultValue: string) => {
+    const [rows] = await db.query<any[]>("SELECT value FROM settings WHERE key = ?", [key])
+    return rows[0]?.value || defaultValue
   }
 
-  // 图片模型配置 - 格式: 显示名|id|类型|价格(分)
-  const imageModels = getSetting('image_models',
+  const imageModels = await getSetting('image_models',
     'GPT-4o|gpt4o|image|1000;Claude 3.5|claude35|image|800;DALL-E 3|dalle3|image|1200;Stable Diffusion XL|sdxl|image|500;Midjourney V6|midjourney|image|1500;Flux.1|flux|image|600'
   )
 
-  // 视频模型配置 - 格式: 显示名|id|类型|价格(分)
-  const videoModels = getSetting('video_models',
+  const videoModels = await getSetting('video_models',
     'Sora|sora|video|5000;Runway Gen-3|runway|video|3000;Pika 1.5|pika|video|2500;Stable Video|svd|video|2000;Kling|kling|video|3500'
   )
 
-  // 尺寸比例配置
-  const ratios = getSetting('ratios', '16:9,9:16,1:1,4:3,3:2,21:9')
+  const ratios = await getSetting('ratios', '16:9,9:16,1:1,4:3,3:2,21:9')
+  const qualities = await getSetting('qualities', '480p,720p,1080p,2K,4K')
+  const counts = await getSetting('counts', '1,2,4,8')
 
-  // 清晰度配置
-  const qualities = getSetting('qualities', '480p,720p,1080p,2K,4K')
-
-  // 生成数量配置
-  const counts = getSetting('counts', '1,2,4,8')
-
-  // 解析模型配置字符串 "显示名|id|类型|价格(分)"
   const parseModels = (config: string) => {
     return config.split(';').map(m => {
       const [name, id, type, price] = m.split('|')
@@ -63,18 +53,19 @@ router.get('/generate', (_req, res: Response): void => {
   res.json({ success: true, data: config })
 })
 
-// 更新生成配置（管理员接口）
 router.post('/generate', (_req, res: Response): void => {
-  // 简化版：直接返回当前配置
-  // 实际应用中需要管理员权限校验
   res.json({ success: true, message: '配置更新接口' })
 })
 
-// 获取平台价格配置
-router.get('/pricing', (_req, res: Response): void => {
-  const imagePrice = (db.prepare("SELECT value FROM settings WHERE key = 'image_price'").get() as { value: string } | undefined)?.value || '1000'
-  const videoPrice = (db.prepare("SELECT value FROM settings WHERE key = 'video_price'").get() as { value: string } | undefined)?.value || '3000'
-  const memberPrice = (db.prepare("SELECT value FROM settings WHERE key = 'member_month_price'").get() as { value: string } | undefined)?.value || '2900'
+router.get('/pricing', async (_req, res: Response): Promise<void> => {
+  const [imageRows] = await db.query<any[]>("SELECT value FROM settings WHERE key = 'image_price'")
+  const imagePrice = imageRows[0]?.value || '1000'
+
+  const [videoRows] = await db.query<any[]>("SELECT value FROM settings WHERE key = 'video_price'")
+  const videoPrice = videoRows[0]?.value || '3000'
+
+  const [memberRows] = await db.query<any[]>("SELECT value FROM settings WHERE key = 'member_month_price'")
+  const memberPrice = memberRows[0]?.value || '2900'
 
   res.json({
     success: true,

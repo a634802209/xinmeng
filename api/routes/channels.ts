@@ -6,54 +6,26 @@ import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 
 const router = Router()
 
-// ===== API 渠道管理 =====
-
-// 获取所有渠道
-router.get('/', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): void => {
-  const channels = db.prepare(
+router.get('/', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
+  const [rows] = await db.query<any[]>(
     'SELECT id, name, type, base_url, model, priority, is_active, weight, success_count, fail_count, last_used_at, created_at FROM api_channels ORDER BY priority DESC, created_at ASC'
-  ).all() as Array<{
-    id: number
-    name: string
-    type: string
-    base_url: string
-    model: string | null
-    priority: number
-    is_active: number
-    weight: number
-    success_count: number
-    fail_count: number
-    last_used_at: string | null
-    created_at: string
-  }>
+  )
 
   res.json({
     success: true,
-    data: channels.map((c) => ({
+    data: rows.map((c) => ({
       ...c,
       is_active: !!c.is_active,
     })),
   })
 })
 
-// 获取单个渠道详情（隐藏 api_key）
-router.get('/:id', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): void => {
-  const channel = db.prepare('SELECT id, name, type, base_url, model, priority, is_active, weight, success_count, fail_count, last_used_at, created_at FROM api_channels WHERE id = ?').get(req.params.id) as
-    | {
-        id: number
-        name: string
-        type: string
-        base_url: string
-        model: string | null
-        priority: number
-        is_active: number
-        weight: number
-        success_count: number
-        fail_count: number
-        last_used_at: string | null
-        created_at: string
-      }
-    | undefined
+router.get('/:id', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
+  const [rows] = await db.query<any[]>(
+    'SELECT id, name, type, base_url, model, priority, is_active, weight, success_count, fail_count, last_used_at, created_at FROM api_channels WHERE id = ?',
+    [req.params.id]
+  )
+  const channel = rows[0]
 
   if (!channel) {
     res.status(404).json({ success: false, error: 'Channel not found' })
@@ -70,8 +42,7 @@ router.get('/:id', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): 
   })
 })
 
-// 创建渠道
-router.post('/', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): void => {
+router.post('/', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const { name, type, base_url, api_key, model, priority, weight } = req.body
 
   if (!name || !type || !base_url || !api_key) {
@@ -79,24 +50,24 @@ router.post('/', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): vo
     return
   }
 
-  const result = db.prepare(
-    'INSERT INTO api_channels (name, type, base_url, api_key, model, priority, weight) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(name, type, base_url, api_key, model || null, priority || 0, weight || 100)
-
-  db.prepare('INSERT INTO admin_logs (admin_id, action, target_type, target_id, detail) VALUES (?, ?, ?, ?, ?)').run(
-    req.adminUser!.id, 'create_channel', 'channel', result.lastInsertRowid, JSON.stringify({ name, type })
+  const result = await db.execute(
+    'INSERT INTO api_channels (name, type, base_url, api_key, model, priority, weight) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [name, type, base_url, api_key, model || null, priority || 0, weight || 100]
   )
 
-  res.json({ success: true, data: { id: result.lastInsertRowid } })
+  await db.execute('INSERT INTO admin_logs (admin_id, action, target_type, target_id, detail) VALUES (?, ?, ?, ?, ?)', [
+    req.adminUser!.id, 'create_channel', 'channel', Number(result.insertId), JSON.stringify({ name, type }),
+  ])
+
+  res.json({ success: true, data: { id: Number(result.insertId) } })
 })
 
-// 更新渠道
-router.put('/:id', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): void => {
+router.put('/:id', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const channelId = parseInt(req.params.id)
   const { name, type, base_url, api_key, model, priority, weight, is_active } = req.body
 
-  const channel = db.prepare('SELECT id FROM api_channels WHERE id = ?').get(channelId) as { id: number } | undefined
-  if (!channel) {
+  const [rows] = await db.query<any[]>('SELECT id FROM api_channels WHERE id = ?', [channelId])
+  if (!rows[0]) {
     res.status(404).json({ success: false, error: 'Channel not found' })
     return
   }
@@ -119,54 +90,49 @@ router.put('/:id', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): 
   }
 
   values.push(channelId)
-  db.prepare(`UPDATE api_channels SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  await db.execute(`UPDATE api_channels SET ${fields.join(', ')} WHERE id = ?`, values)
 
-  db.prepare('INSERT INTO admin_logs (admin_id, action, target_type, target_id, detail) VALUES (?, ?, ?, ?, ?)').run(
-    req.adminUser!.id, 'update_channel', 'channel', channelId, JSON.stringify(req.body)
-  )
+  await db.execute('INSERT INTO admin_logs (admin_id, action, target_type, target_id, detail) VALUES (?, ?, ?, ?, ?)', [
+    req.adminUser!.id, 'update_channel', 'channel', channelId, JSON.stringify(req.body),
+  ])
 
   res.json({ success: true })
 })
 
-// 删除渠道
-router.delete('/:id', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): void => {
+router.delete('/:id', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const channelId = parseInt(req.params.id)
 
-  const channel = db.prepare('SELECT id FROM api_channels WHERE id = ?').get(channelId) as { id: number } | undefined
-  if (!channel) {
+  const [rows] = await db.query<any[]>('SELECT id FROM api_channels WHERE id = ?', [channelId])
+  if (!rows[0]) {
     res.status(404).json({ success: false, error: 'Channel not found' })
     return
   }
 
-  db.prepare('DELETE FROM api_channels WHERE id = ?').run(channelId)
+  await db.execute('DELETE FROM api_channels WHERE id = ?', [channelId])
 
-  db.prepare('INSERT INTO admin_logs (admin_id, action, target_type, target_id, detail) VALUES (?, ?, ?, ?, ?)').run(
-    req.adminUser!.id, 'delete_channel', 'channel', channelId, ''
-  )
+  await db.execute('INSERT INTO admin_logs (admin_id, action, target_type, target_id, detail) VALUES (?, ?, ?, ?, ?)', [
+    req.adminUser!.id, 'delete_channel', 'channel', channelId, '',
+  ])
 
   res.json({ success: true })
 })
 
-// 测试渠道连通性
 router.post('/:id/test', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const channelId = parseInt(req.params.id)
 
-  const channel = db.prepare('SELECT * FROM api_channels WHERE id = ?').get(channelId) as
-    | { id: number; base_url: string; api_key: string; type: string; model: string | null }
-    | undefined
+  const [rows] = await db.query<any[]>('SELECT * FROM api_channels WHERE id = ?', [channelId])
+  const channel = rows[0]
 
   if (!channel) {
     res.status(404).json({ success: false, error: 'Channel not found' })
     return
   }
 
-  // SSRF protection: only allow http/https protocols
   const url = new URL(channel.base_url)
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     res.status(400).json({ success: false, error: 'Invalid URL protocol' })
     return
   }
-  // Block private IP ranges
   const hostname = url.hostname
   if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('10.') || hostname.startsWith('192.168.') || hostname.startsWith('172.')) {
     res.status(400).json({ success: false, error: 'Private IP addresses are not allowed' })
@@ -183,33 +149,26 @@ router.post('/:id/test', adminAuthMiddleware, async (req: AdminAuthRequest, res:
     })
 
     if (response.ok) {
-      db.prepare('UPDATE api_channels SET success_count = success_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = ?').run(channelId)
+      await db.execute('UPDATE api_channels SET success_count = success_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = ?', [channelId])
       res.json({ success: true, data: { status: 'ok', statusCode: response.status } })
     } else {
-      db.prepare('UPDATE api_channels SET fail_count = fail_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = ?').run(channelId)
+      await db.execute('UPDATE api_channels SET fail_count = fail_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = ?', [channelId])
       res.json({ success: false, error: `HTTP ${response.status}` })
     }
   } catch {
-    db.prepare('UPDATE api_channels SET fail_count = fail_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = ?').run(channelId)
+    await db.execute('UPDATE api_channels SET fail_count = fail_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = ?', [channelId])
     res.json({ success: false, error: 'Connection failed' })
   }
 })
 
-// 获取可用渠道（供生成接口内部调用）- 需要认证
-router.get('/available/:type', authMiddleware, (req: AuthRequest, res: Response): void => {
+router.get('/available/:type', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const type = req.params.type
-  const channels = db.prepare(
-    'SELECT id, name, base_url, api_key, model, weight FROM api_channels WHERE type = ? AND is_active = 1 ORDER BY priority DESC'
-  ).all(type) as Array<{
-    id: number
-    name: string
-    base_url: string
-    api_key: string
-    model: string | null
-    weight: number
-  }>
+  const [rows] = await db.query<any[]>(
+    'SELECT id, name, base_url, api_key, model, weight FROM api_channels WHERE type = ? AND is_active = 1 ORDER BY priority DESC',
+    [type]
+  )
 
-  res.json({ success: true, data: channels })
+  res.json({ success: true, data: rows })
 })
 
 export default router

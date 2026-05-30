@@ -1,4 +1,4 @@
-import mysql from 'mysql2/promise'
+import mysql, { Pool, PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise'
 
 const DB_HOST = process.env.DB_HOST || 'localhost'
 const DB_PORT = parseInt(process.env.DB_PORT || '3306')
@@ -6,9 +6,9 @@ const DB_USER = process.env.DB_USER || 'root'
 const DB_PASSWORD = process.env.DB_PASSWORD || ''
 const DB_NAME = process.env.DB_NAME || 'xinmeng'
 
-let pool: mysql.Pool | null = null
+let pool: Pool | null = null
 
-export async function getConnection(): Promise<mysql.Connection> {
+export async function getConnection(): Promise<PoolConnection> {
   if (!pool) {
     pool = mysql.createPool({
       host: DB_HOST,
@@ -24,19 +24,62 @@ export async function getConnection(): Promise<mysql.Connection> {
   return pool.getConnection()
 }
 
+export async function query<T extends RowDataPacket[] | ResultSetHeader>(
+  sql: string,
+  params?: any[]
+): Promise<T> {
+  const conn = await getConnection()
+  try {
+    const [rows] = await conn.execute<T>(sql, params)
+    return rows
+  } finally {
+    conn.release()
+  }
+}
+
+export async function execute(
+  sql: string,
+  params?: any[]
+): Promise<ResultSetHeader> {
+  const conn = await getConnection()
+  try {
+    const [result] = await conn.execute<ResultSetHeader>(sql, params)
+    return result
+  } finally {
+    conn.release()
+  }
+}
+
+export async function transaction<T>(
+  callback: (conn: PoolConnection) => Promise<T>
+): Promise<T> {
+  const conn = await getConnection()
+  try {
+    await conn.beginTransaction()
+    const result = await callback(conn)
+    await conn.commit()
+    return result
+  } catch (error) {
+    await conn.rollback()
+    throw error
+  } finally {
+    conn.release()
+  }
+}
+
 export async function initDB(): Promise<void> {
   try {
     console.log(`[DB] Initializing MySQL database at: ${DB_HOST}:${DB_PORT}/${DB_NAME}`)
 
-    const connection = await mysql.createConnection({
+    const initConn = await mysql.createConnection({
       host: DB_HOST,
       port: DB_PORT,
       user: DB_USER,
       password: DB_PASSWORD,
     })
 
-    await connection.execute(`CREATE DATABASE IF NOT EXISTS ${DB_NAME}`)
-    await connection.end()
+    await initConn.execute(`CREATE DATABASE IF NOT EXISTS ${DB_NAME}`)
+    await initConn.end()
 
     const conn = await getConnection()
 
@@ -54,7 +97,7 @@ export async function initDB(): Promise<void> {
         storage_used INT DEFAULT 0,
         storage_limit INT DEFAULT 104857600,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
 
     await conn.execute(`
@@ -71,7 +114,7 @@ export async function initDB(): Promise<void> {
         category VARCHAR(100),
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
 
     await conn.execute(`
@@ -91,7 +134,7 @@ export async function initDB(): Promise<void> {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         completed_at DATETIME,
         FOREIGN KEY (user_id) REFERENCES users(id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
 
     await conn.execute(`
@@ -100,7 +143,7 @@ export async function initDB(): Promise<void> {
         code VARCHAR(6) NOT NULL,
         expires_at DATETIME NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
 
     await conn.execute(`
@@ -110,7 +153,7 @@ export async function initDB(): Promise<void> {
         expires_at DATETIME NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_password_resets_email (email)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
 
     await conn.execute(`
@@ -124,7 +167,7 @@ export async function initDB(): Promise<void> {
         paid_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
 
     await conn.execute(`
@@ -132,7 +175,7 @@ export async function initDB(): Promise<void> {
         key VARCHAR(100) PRIMARY KEY,
         value TEXT NOT NULL,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
 
     await conn.execute(`
@@ -150,7 +193,7 @@ export async function initDB(): Promise<void> {
         fail_count INT DEFAULT 0,
         last_used_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
 
     await conn.execute(`
@@ -164,7 +207,7 @@ export async function initDB(): Promise<void> {
         related_id INT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
 
     await conn.execute(`
@@ -177,18 +220,18 @@ export async function initDB(): Promise<void> {
         last_login_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         deleted_at DATETIME
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `)
 
-    await conn.execute(`CREATE INDEX IF NOT EXISTS idx_admin_accounts_username ON admin_accounts(username);`)
+    await conn.execute(`CREATE INDEX idx_admin_accounts_username ON admin_accounts(username)`)
 
     await conn.execute(`
       INSERT IGNORE INTO admin_accounts (id, username, password_hash, role) VALUES
-        (1, 'admin', '$2b$10$lyOBawLdSpX3P582fiM4P.3dKhATV1DXWtI7Beqcczqy7NYpFhWRS', 'superadmin');
+        (1, 'admin', '\$2b\$10\$lyOBawLdSpX3P582fiM4P.3dKhATV1DXWtI7Beqcczqy7NYpFhWRS', 'superadmin')
     `)
 
     await conn.execute(`
-      UPDATE admin_accounts SET password_hash = '$2b$10$lyOBawLdSpX3P582fiM4P.3dKhATV1DXWtI7Beqcczqy7NYpFhWRS' WHERE username = 'admin';
+      UPDATE admin_accounts SET password_hash = '\$2b\$10\$lyOBawLdSpX3P582fiM4P.3dKhATV1DXWtI7Beqcczqy7NYpFhWRS' WHERE username = 'admin'
     `)
 
     await conn.execute(`
@@ -198,10 +241,10 @@ export async function initDB(): Promise<void> {
         ('member_month_price', '29'),
         ('free_storage_mb', '100'),
         ('member_storage_mb', '1024'),
-        ('site_name', '新梦AI');
+        ('site_name', '新梦AI')
     `)
 
-    await conn.release()
+    conn.release()
     console.log('[DB] MySQL database initialized successfully')
   } catch (err) {
     console.error('[DB] Failed to initialize database:', err)
@@ -209,4 +252,5 @@ export async function initDB(): Promise<void> {
   }
 }
 
-export default { getConnection, initDB }
+const db = { query, execute, transaction, initDB, getConnection }
+export default db

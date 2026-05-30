@@ -9,7 +9,7 @@ export interface CreditRecord {
   created_at: string
 }
 
-export function getCreditRecords(userId: number, options: { page?: number; pageSize?: number; type?: string } = {}) {
+export async function getCreditRecords(userId: number, options: { page?: number; pageSize?: number; type?: string } = {}) {
   const page = options.page || 1
   const pageSize = options.pageSize || 20
   const type = options.type || ''
@@ -23,15 +23,17 @@ export function getCreditRecords(userId: number, options: { page?: number; pageS
     params.push(type)
   }
 
-  const total = (db.prepare(`SELECT COUNT(*) as count FROM credit_records ${whereClause}`).get(...params) as { count: number }).count
+  const [countRows] = await db.query<any[]>(`SELECT COUNT(*) as count FROM credit_records ${whereClause}`, params)
+  const total = countRows[0].count
 
-  const records = db.prepare(
+  const [records] = await db.query<any[]>(
     `SELECT id, type, amount, balance, description, created_at
      FROM credit_records
      ${whereClause}
      ORDER BY created_at DESC
-     LIMIT ? OFFSET ?`
-  ).all(...params, pageSize, offset) as CreditRecord[]
+     LIMIT ? OFFSET ?`,
+    [...params, pageSize, offset]
+  )
 
   return {
     list: records,
@@ -39,24 +41,28 @@ export function getCreditRecords(userId: number, options: { page?: number; pageS
   }
 }
 
-export function getCreditStats(userId: number) {
-  const totalRecharge = (db.prepare(
-    "SELECT COALESCE(SUM(amount), 0) as total FROM credit_records WHERE user_id = ? AND type = 'recharge'"
-  ).get(userId) as { total: number }).total
+export async function getCreditStats(userId: number) {
+  const [rechargeRows] = await db.query<any[]>(
+    "SELECT COALESCE(SUM(amount), 0) as total FROM credit_records WHERE user_id = ? AND type = 'recharge'",
+    [userId]
+  )
+  const totalRecharge = rechargeRows[0].total
 
-  const totalConsume = (db.prepare(
-    "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM credit_records WHERE user_id = ? AND type = 'consume'"
-  ).get(userId) as { total: number }).total
+  const [consumeRows] = await db.query<any[]>(
+    "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM credit_records WHERE user_id = ? AND type = 'consume'",
+    [userId]
+  )
+  const totalConsume = consumeRows[0].total
 
-  const currentBalance = (db.prepare(
-    'SELECT credits FROM users WHERE id = ?'
-  ).get(userId) as { credits: number } | undefined)?.credits || 0
+  const [userRows] = await db.query<any[]>('SELECT credits FROM users WHERE id = ?', [userId])
+  const currentBalance = userRows[0]?.credits || 0
 
   return { totalRecharge, totalConsume, currentBalance }
 }
 
-export function addCreditRecord(userId: number, type: string, amount: number, balance: number, description?: string): void {
-  db.prepare(
-    'INSERT INTO credit_records (user_id, type, amount, balance, description) VALUES (?, ?, ?, ?, ?)'
-  ).run(userId, type, amount, balance, description || null)
+export async function addCreditRecord(userId: number, type: string, amount: number, balance: number, description?: string): Promise<void> {
+  await db.execute(
+    'INSERT INTO credit_records (user_id, type, amount, balance, description) VALUES (?, ?, ?, ?, ?)',
+    [userId, type, amount, balance, description || null]
+  )
 }

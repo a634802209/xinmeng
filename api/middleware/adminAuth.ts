@@ -26,10 +26,28 @@ export function adminAuthMiddleware(req: AdminAuthRequest, res: Response, next: 
 
   try {
     const decoded = jwt.verify(token, ADMIN_JWT_SECRET) as { id: number; username: string; role: string }
+    req.adminUser = decoded
+    next()
+  } catch {
+    res.status(401).json({ success: false, error: 'Invalid or expired token' })
+    return
+  }
+}
 
-    const admin = db.prepare('SELECT id, username, role, is_active FROM admin_accounts WHERE id = ?').get(decoded.id) as
-      | { id: number; username: string; role: string; is_active: number }
-      | undefined
+export async function adminAuthMiddlewareWithCheck(req: AdminAuthRequest, res: Response, next: NextFunction): Promise<void> {
+  const authHeader = req.headers.authorization
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ success: false, error: 'Unauthorized' })
+    return
+  }
+
+  const token = authHeader.split(' ')[1]
+
+  try {
+    const decoded = jwt.verify(token, ADMIN_JWT_SECRET) as { id: number; username: string; role: string }
+
+    const [rows] = await db.query<any[]>('SELECT id, username, role, is_active FROM admin_accounts WHERE id = ?', [decoded.id])
+    const admin = rows[0]
 
     if (!admin || !admin.is_active) {
       res.status(403).json({ success: false, error: 'Admin account is disabled' })

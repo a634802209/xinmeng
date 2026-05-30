@@ -29,7 +29,6 @@ function validateLength(value: string, min: number, max: number, field: string):
   return null
 }
 
-// P2 修复：密码复杂度校验（大小写字母 + 数字 + 特殊字符，长度≥12）
 function validatePasswordComplexity(password: string): string | null {
   if (password.length < 12) {
     return 'Password must be at least 12 characters'
@@ -49,7 +48,6 @@ function validatePasswordComplexity(password: string): string | null {
   return null
 }
 
-// Admin login with username/password
 router.post('/login', async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const { username, password } = req.body
 
@@ -67,32 +65,30 @@ router.post('/login', async (req: AdminAuthRequest, res: Response): Promise<void
 
   const clientIp = getClientIp(req)
 
-  const admin = db.prepare('SELECT * FROM admin_accounts WHERE username = ?').get(username) as
-    | { id: number; username: string; password_hash: string; role: string; is_active: number }
-    | undefined
+  const [rows] = await db.query<any[]>('SELECT * FROM admin_accounts WHERE username = ?', [username])
+  const admin = rows[0]
 
   if (!admin) {
-    trackLoginAttempt(clientIp, username, null, false)
+    await trackLoginAttempt(clientIp, username, null, false)
     res.status(401).json({ success: false, error: 'Invalid username or password' })
     return
   }
 
   if (!admin.is_active) {
-    trackLoginAttempt(clientIp, username, null, false)
+    await trackLoginAttempt(clientIp, username, null, false)
     res.status(403).json({ success: false, error: 'Account is disabled' })
     return
   }
 
   const isValid = await bcrypt.compare(password, admin.password_hash)
   if (!isValid) {
-    trackLoginAttempt(clientIp, username, null, false)
+    await trackLoginAttempt(clientIp, username, null, false)
     res.status(401).json({ success: false, error: 'Invalid username or password' })
     return
   }
 
-  // Update last login
-  db.prepare("UPDATE admin_accounts SET last_login_at = datetime('now') WHERE id = ?").run(admin.id)
-  trackLoginAttempt(clientIp, username, null, true)
+  await db.execute("UPDATE admin_accounts SET last_login_at = datetime('now') WHERE id = ?", [admin.id])
+  await trackLoginAttempt(clientIp, username, null, true)
 
   const token = generateAdminToken({ id: admin.id, username: admin.username, role: admin.role })
 
@@ -109,7 +105,6 @@ router.post('/login', async (req: AdminAuthRequest, res: Response): Promise<void
   })
 })
 
-// Get current admin info
 router.get('/me', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): void => {
   res.json({
     success: true,
@@ -117,7 +112,6 @@ router.get('/me', adminAuthMiddleware, (req: AdminAuthRequest, res: Response): v
   })
 })
 
-// Change admin password
 router.post('/change-password', adminAuthMiddleware, async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const { currentPassword, newPassword } = req.body
 
@@ -140,9 +134,8 @@ router.post('/change-password', adminAuthMiddleware, async (req: AdminAuthReques
 
   const adminId = req.adminUser!.id
 
-  const admin = db.prepare('SELECT password_hash FROM admin_accounts WHERE id = ?').get(adminId) as
-    | { password_hash: string }
-    | undefined
+  const [rows] = await db.query<any[]>('SELECT password_hash FROM admin_accounts WHERE id = ?', [adminId])
+  const admin = rows[0]
 
   if (!admin) {
     res.status(404).json({ success: false, error: 'Admin not found' })
@@ -156,28 +149,19 @@ router.post('/change-password', adminAuthMiddleware, async (req: AdminAuthReques
   }
 
   const newHash = await bcrypt.hash(newPassword, 10)
-  db.prepare('UPDATE admin_accounts SET password_hash = ? WHERE id = ?').run(newHash, adminId)
+  await db.execute('UPDATE admin_accounts SET password_hash = ? WHERE id = ?', [newHash, adminId])
 
   res.json({ success: true, message: 'Password changed successfully' })
 })
 
-// List admin accounts (superadmin only)
-router.get('/accounts', adminAuthMiddleware, requireSuperAdmin, (req: AdminAuthRequest, res: Response): void => {
-  const admins = db.prepare(
+router.get('/accounts', adminAuthMiddleware, requireSuperAdmin, async (req: AdminAuthRequest, res: Response): Promise<void> => {
+  const [rows] = await db.query<any[]>(
     'SELECT id, username, role, is_active, last_login_at, created_at FROM admin_accounts ORDER BY id'
-  ).all() as Array<{
-    id: number
-    username: string
-    role: string
-    is_active: number
-    last_login_at: string | null
-    created_at: string
-  }>
+  )
 
-  res.json({ success: true, data: admins })
+  res.json({ success: true, data: rows })
 })
 
-// Create admin account (superadmin only)
 router.post('/accounts', adminAuthMiddleware, requireSuperAdmin, async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const { username, password, role = 'admin' } = req.body
 
@@ -193,7 +177,6 @@ router.post('/accounts', adminAuthMiddleware, requireSuperAdmin, async (req: Adm
     return
   }
 
-  // P2 修复：密码复杂度校验
   const complexityError = validatePasswordComplexity(password)
   if (complexityError) {
     res.status(400).json({ success: false, error: complexityError })
@@ -208,12 +191,12 @@ router.post('/accounts', adminAuthMiddleware, requireSuperAdmin, async (req: Adm
   const passwordHash = await bcrypt.hash(password, 10)
 
   try {
-    db.prepare('INSERT INTO admin_accounts (username, password_hash, role) VALUES (?, ?, ?)').run(
-      username, passwordHash, role
-    )
+    await db.execute('INSERT INTO admin_accounts (username, password_hash, role) VALUES (?, ?, ?)', [
+      username, passwordHash, role,
+    ])
     res.json({ success: true, message: 'Admin account created' })
   } catch (err: any) {
-    if (err.message?.includes('UNIQUE constraint failed')) {
+    if (err.code === 'ER_DUP_ENTRY') {
       res.status(409).json({ success: false, error: 'Username already exists' })
       return
     }
@@ -221,8 +204,7 @@ router.post('/accounts', adminAuthMiddleware, requireSuperAdmin, async (req: Adm
   }
 })
 
-// Toggle admin account status (superadmin only)
-router.patch('/accounts/:id/status', adminAuthMiddleware, requireSuperAdmin, (req: AdminAuthRequest, res: Response): void => {
+router.patch('/accounts/:id/status', adminAuthMiddleware, requireSuperAdmin, async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const id = parseInt(req.params.id)
   const { isActive } = req.body
 
@@ -231,12 +213,11 @@ router.patch('/accounts/:id/status', adminAuthMiddleware, requireSuperAdmin, (re
     return
   }
 
-  db.prepare('UPDATE admin_accounts SET is_active = ? WHERE id = ?').run(isActive ? 1 : 0, id)
+  await db.execute('UPDATE admin_accounts SET is_active = ? WHERE id = ?', [isActive ? 1 : 0, id])
   res.json({ success: true })
 })
 
-// Delete admin account (superadmin only) - P2 修复：软删除
-router.delete('/accounts/:id', adminAuthMiddleware, requireSuperAdmin, (req: AdminAuthRequest, res: Response): void => {
+router.delete('/accounts/:id', adminAuthMiddleware, requireSuperAdmin, async (req: AdminAuthRequest, res: Response): Promise<void> => {
   const id = parseInt(req.params.id)
 
   if (id === req.adminUser!.id) {
@@ -244,8 +225,7 @@ router.delete('/accounts/:id', adminAuthMiddleware, requireSuperAdmin, (req: Adm
     return
   }
 
-  // P2 修复：软删除，添加 deleted_at 标记
-  db.prepare("UPDATE admin_accounts SET is_active = 0, deleted_at = datetime('now') WHERE id = ?").run(id)
+  await db.execute("UPDATE admin_accounts SET is_active = 0, deleted_at = datetime('now') WHERE id = ?", [id])
   res.json({ success: true, message: 'Account soft deleted' })
 })
 

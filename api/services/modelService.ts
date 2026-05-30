@@ -11,7 +11,7 @@ export interface Model {
   config: Record<string, unknown> | null
 }
 
-export function getModels(type?: string): Model[] {
+export async function getModels(type?: string): Promise<Model[]> {
   let sql = 'SELECT * FROM models WHERE is_active = 1'
   const params: string[] = []
 
@@ -22,16 +22,7 @@ export function getModels(type?: string): Model[] {
 
   sql += ' ORDER BY type, name'
 
-  const rows = db.prepare(sql).all(...params) as Array<{
-    id: number
-    name: string
-    description: string | null
-    type: string
-    provider: string | null
-    price: number
-    is_active: number
-    config: string | null
-  }>
+  const [rows] = await db.query<any[]>(sql, params)
 
   return rows.map((r) => ({
     id: r.id,
@@ -45,19 +36,9 @@ export function getModels(type?: string): Model[] {
   }))
 }
 
-export function getModelById(id: number): Model | undefined {
-  const row = db.prepare('SELECT * FROM models WHERE id = ?').get(id) as
-    | {
-        id: number
-        name: string
-        description: string | null
-        type: string
-        provider: string | null
-        price: number
-        is_active: number
-        config: string | null
-      }
-    | undefined
+export async function getModelById(id: number): Promise<Model | undefined> {
+  const [rows] = await db.query<any[]>('SELECT * FROM models WHERE id = ?', [id])
+  const row = rows[0]
 
   if (!row) return undefined
 

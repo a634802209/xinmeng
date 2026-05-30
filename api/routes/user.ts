@@ -13,8 +13,8 @@ function maskEmail(email: string): string {
   return `${local[0]}${'*'.repeat(local.length - 2)}${local[local.length - 1]}@${domain}`
 }
 
-router.get('/profile', authMiddleware, (req: AuthRequest, res: Response): void => {
-  const user = getUserById(req.user!.id)
+router.get('/profile', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  const user = await getUserById(req.user!.id)
 
   if (!user) {
     error(res, 'User not found', 404)
@@ -33,8 +33,8 @@ router.get('/profile', authMiddleware, (req: AuthRequest, res: Response): void =
   })
 })
 
-router.get('/usage', authMiddleware, (req: AuthRequest, res: Response): void => {
-  const usage = getUsageStats(req.user!.id)
+router.get('/usage', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  const usage = await getUsageStats(req.user!.id)
   success(res, { usage })
 })
 

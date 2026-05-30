@@ -50,10 +50,10 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
   const code = generateCode()
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
 
-  const stmt = db.prepare(
-    'INSERT OR REPLACE INTO verify_codes (email, code, expires_at) VALUES (?, ?, ?)'
+  await db.execute(
+    'INSERT OR REPLACE INTO verify_codes (email, code, expires_at) VALUES (?, ?, ?)',
+    [email, code, expiresAt]
   )
-  stmt.run(email, code, expiresAt)
 
   if (isMailConfigured()) {
     try {
@@ -69,56 +69,55 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
   }
 })
 
-router.post('/login', (req: Request, res: Response): void => {
+router.post('/login', async (req: Request, res: Response): Promise<void> => {
   const clientIp = getClientIp(req)
   const fingerprint = getFingerprint(req)
 
   const validation = validate(loginSchema, req.body)
   if (!validation.success) {
-    trackLoginAttempt(clientIp, req.body?.email || null, fingerprint, false)
+    await trackLoginAttempt(clientIp, req.body?.email || null, fingerprint, false)
     error(res, validation.error, 400)
     return
   }
 
   const { email, code } = validation.data
 
-  const record = db.prepare('SELECT * FROM verify_codes WHERE email = ?').get(email) as
-    | { code: string; expires_at: string }
-    | undefined
+  const [rows] = await db.query<any[]>('SELECT * FROM verify_codes WHERE email = ?', [email])
+  const record = rows[0]
 
   if (!record) {
-    trackLoginAttempt(clientIp, email, fingerprint, false)
+    await trackLoginAttempt(clientIp, email, fingerprint, false)
     error(res, 'Code not found', 400)
     return
   }
 
   if (record.code !== code) {
-    trackLoginAttempt(clientIp, email, fingerprint, false)
+    await trackLoginAttempt(clientIp, email, fingerprint, false)
     error(res, 'Invalid code', 400)
     return
   }
 
   if (new Date(record.expires_at) < new Date()) {
-    trackLoginAttempt(clientIp, email, fingerprint, false)
+    await trackLoginAttempt(clientIp, email, fingerprint, false)
     error(res, 'Code expired', 400)
     return
   }
 
-  db.prepare('DELETE FROM verify_codes WHERE email = ?').run(email)
+  await db.execute('DELETE FROM verify_codes WHERE email = ?', [email])
 
-  let user = getUserByEmail(email)
+  let user = await getUserByEmail(email)
 
   if (!user) {
-    user = createUser(email, email.split('@')[0], `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`)
+    user = await createUser(email, email.split('@')[0], `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`)
   }
 
   if (user.isBanned) {
-    trackLoginAttempt(clientIp, email, fingerprint, false)
+    await trackLoginAttempt(clientIp, email, fingerprint, false)
     error(res, 'Account is banned', 403)
     return
   }
 
-  trackLoginAttempt(clientIp, email, fingerprint, true)
+  await trackLoginAttempt(clientIp, email, fingerprint, true)
 
   const token = generateToken({ id: user.id, email: user.email, nickname: user.nickname, avatar: user.avatar, isAdmin: user.isAdmin })
 
@@ -138,8 +137,8 @@ router.post('/login', (req: Request, res: Response): void => {
   })
 })
 
-router.get('/me', authMiddleware, (req: AuthRequest, res: Response): void => {
-  const user = getUserById(req.user!.id)
+router.get('/me', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  const user = await getUserById(req.user!.id)
 
   if (!user) {
     error(res, 'User not found', 404)
@@ -161,8 +160,6 @@ router.get('/me', authMiddleware, (req: AuthRequest, res: Response): void => {
   })
 })
 
-// ===== 密码找回功能 =====
-
 router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -170,7 +167,7 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
     return
   }
 
-  const user = getUserByEmail(email)
+  const user = await getUserByEmail(email)
   if (!user) {
     error(res, 'Email not registered', 404)
     return
@@ -184,9 +181,10 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
   const resetToken = crypto.randomBytes(32).toString('hex')
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
 
-  db.prepare(
-    'INSERT OR REPLACE INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)'
-  ).run(email, resetToken, expiresAt)
+  await db.execute(
+    'INSERT OR REPLACE INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)',
+    [email, resetToken, expiresAt]
+  )
 
   const resetUrl = `${FRONTEND_URL}/reset-password`
 
@@ -199,16 +197,15 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
   }
 })
 
-router.post('/reset-password', (req: Request, res: Response): void => {
+router.post('/reset-password', async (req: Request, res: Response): Promise<void> => {
   const { token, newPassword } = req.body
   if (!token || !newPassword || newPassword.length < 6) {
     error(res, 'Invalid token or password too short', 400)
     return
   }
 
-  const record = db.prepare('SELECT * FROM password_resets WHERE token = ?').get(token) as
-    | { email: string; expires_at: string }
-    | undefined
+  const [rows] = await db.query<any[]>('SELECT * FROM password_resets WHERE token = ?', [token])
+  const record = rows[0]
 
   if (!record) {
     error(res, 'Invalid or expired token', 400)
@@ -220,16 +217,17 @@ router.post('/reset-password', (req: Request, res: Response): void => {
     return
   }
 
-  db.prepare('UPDATE users SET password_hash = ? WHERE email = ?').run(newPassword, record.email)
-  db.prepare('DELETE FROM password_resets WHERE token = ?').run(token)
+  await db.execute('UPDATE users SET password_hash = ? WHERE email = ?', [newPassword, record.email])
+  await db.execute('DELETE FROM password_resets WHERE token = ?', [token])
 
   success(res, { message: 'Password reset successfully' })
 })
 
-function getUserById(userId: number) {
-  return getUserByEmail(
-    (db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string } | undefined)?.email || ''
-  )
+async function getUserById(userId: number) {
+  const [rows] = await db.query<any[]>('SELECT email FROM users WHERE id = ?', [userId])
+  const email = rows[0]?.email
+  if (!email) return undefined
+  return await getUserByEmail(email)
 }
 
 function maskEmail(email: string): string {

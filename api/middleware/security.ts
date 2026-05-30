@@ -59,40 +59,57 @@ export function securityMiddleware(req: SecurityRequest, res: Response, next: Ne
     return
   }
 
+  next()
+}
+
+export async function securityMiddlewareWithChecks(req: SecurityRequest, res: Response, next: NextFunction): Promise<void> {
+  const clientIp = getClientIp(req)
+  const fingerprint = getFingerprint(req)
+  req.clientIp = clientIp
+  req.fingerprint = fingerprint
+
+  if (isPrivateIP(clientIp)) {
+    next()
+    return
+  }
+
   const now = new Date().toISOString()
 
-  const ipBlocked = db.prepare(
-    `SELECT 1 FROM ip_blacklist WHERE ip = ? AND (expires_at IS NULL OR expires_at > ?)`
-  ).get(clientIp, now) as { '1': number } | undefined
+  const [ipRows] = await db.query<any[]>(
+    `SELECT 1 FROM ip_blacklist WHERE ip = ? AND (expires_at IS NULL OR expires_at > ?)`,
+    [clientIp, now]
+  )
 
-  if (ipBlocked) {
+  if (ipRows.length > 0) {
     req.isBlocked = true
     req.blockReason = 'IP_BLACKLIST'
-    logAccess(req, res, 403, 'IP_BLOCKED')
+    await logAccess(req, res, 403, 'IP_BLOCKED')
     res.status(403).json({ success: false, error: 'Access denied: IP blocked' })
     return
   }
 
-  const deviceBlocked = db.prepare(
-    `SELECT 1 FROM device_blacklist WHERE fingerprint = ? AND (expires_at IS NULL OR expires_at > ?)`
-  ).get(fingerprint, now) as { '1': number } | undefined
+  const [deviceRows] = await db.query<any[]>(
+    `SELECT 1 FROM device_blacklist WHERE fingerprint = ? AND (expires_at IS NULL OR expires_at > ?)`,
+    [fingerprint, now]
+  )
 
-  if (deviceBlocked) {
+  if (deviceRows.length > 0) {
     req.isBlocked = true
     req.blockReason = 'DEVICE_BLACKLIST'
-    logAccess(req, res, 403, 'DEVICE_BLOCKED')
+    await logAccess(req, res, 403, 'DEVICE_BLOCKED')
     res.status(403).json({ success: false, error: 'Access denied: Device blocked' })
     return
   }
 
-  const failedAttempts = db.prepare(
-    `SELECT COUNT(*) as count FROM login_attempts WHERE ip = ? AND success = 0 AND created_at > datetime('now', '-30 minutes')`
-  ).get(clientIp) as { count: number }
+  const [attemptRows] = await db.query<any[]>(
+    `SELECT COUNT(*) as count FROM login_attempts WHERE ip = ? AND success = 0 AND created_at > datetime('now', '-30 minutes')`,
+    [clientIp]
+  )
 
-  if (failedAttempts.count >= 10) {
+  if (attemptRows[0].count >= 10) {
     req.isBlocked = true
     req.blockReason = 'BRUTE_FORCE'
-    logAccess(req, res, 429, 'TOO_MANY_FAILED_LOGINS')
+    await logAccess(req, res, 429, 'TOO_MANY_FAILED_LOGINS')
     res.status(429).json({ success: false, error: 'Too many failed login attempts. Try again later.' })
     return
   }
@@ -100,7 +117,7 @@ export function securityMiddleware(req: SecurityRequest, res: Response, next: Ne
   next()
 }
 
-export function logAccess(req: SecurityRequest, res: Response, statusCode?: number, blockReason?: string): void {
+export async function logAccess(req: SecurityRequest, res: Response, statusCode?: number, blockReason?: string): Promise<void> {
   try {
     const ip = req.clientIp || getClientIp(req)
     const fingerprint = req.fingerprint || getFingerprint(req)
@@ -118,10 +135,11 @@ export function logAccess(req: SecurityRequest, res: Response, statusCode?: numb
     if (userAgent && userAgent.length < 20) riskScore += 10
     if (method !== 'GET' && method !== 'POST') riskScore += 5
 
-    db.prepare(
+    await db.execute(
       `INSERT INTO access_audit_logs (ip, fingerprint, user_id, method, path, status_code, user_agent, risk_score, is_blocked, block_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(ip, fingerprint, userId, method, path, code, userAgent, riskScore, blocked, reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [ip, fingerprint, userId, method, path, code, userAgent, riskScore, blocked, reason]
+    )
   } catch (err) {
     console.error('[Security] Failed to log access:', err)
   }
@@ -134,7 +152,7 @@ export function auditLogMiddleware(req: SecurityRequest, res: Response, next: Ne
   res.end = function (this: Response, ...args: any[]) {
     if (!ended) {
       ended = true
-      logAccess(req, res)
+      logAccess(req, res).catch(err => console.error('Failed to log access:', err))
     }
     return originalEnd.apply(this, args)
   } as any
@@ -142,19 +160,21 @@ export function auditLogMiddleware(req: SecurityRequest, res: Response, next: Ne
   next()
 }
 
-export function trackLoginAttempt(ip: string, email: string | null, fingerprint: string | null, success: boolean): void {
+export async function trackLoginAttempt(ip: string, email: string | null, fingerprint: string | null, success: boolean): Promise<void> {
   try {
-    db.prepare(
-      `INSERT INTO login_attempts (ip, email, fingerprint, success) VALUES (?, ?, ?, ?)`
-    ).run(ip, email, fingerprint, success ? 1 : 0)
+    await db.execute(
+      `INSERT INTO login_attempts (ip, email, fingerprint, success) VALUES (?, ?, ?, ?)`,
+      [ip, email, fingerprint, success ? 1 : 0]
+    )
 
     if (!success) {
-      const failed = db.prepare(
-        `SELECT COUNT(*) as count FROM login_attempts WHERE ip = ? AND success = 0 AND created_at > datetime('now', '-30 minutes')`
-      ).get(ip) as { count: number }
+      const [rows] = await db.query<any[]>(
+        `SELECT COUNT(*) as count FROM login_attempts WHERE ip = ? AND success = 0 AND created_at > datetime('now', '-30 minutes')`,
+        [ip]
+      )
 
-      if (failed.count >= 10) {
-        console.warn(`[Security] IP ${ip} has ${failed.count} failed login attempts. Consider blacklisting.`)
+      if (rows[0].count >= 10) {
+        console.warn(`[Security] IP ${ip} has ${rows[0].count} failed login attempts. Consider blacklisting.`)
       }
     }
   } catch (err) {

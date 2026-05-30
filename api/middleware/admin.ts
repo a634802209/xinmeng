@@ -26,9 +26,27 @@ export function adminMiddleware(req: AdminRequest, res: Response, next: NextFunc
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string }
-    const user = db.prepare('SELECT id, email, is_admin, is_banned FROM users WHERE id = ?').get(decoded.id) as
-      | { id: number; email: string; is_admin: number; is_banned: number }
-      | undefined
+    req.admin = { id: decoded.id, email: decoded.email, isAdmin: true }
+    next()
+  } catch {
+    res.status(401).json({ success: false, error: 'Invalid token' })
+    return
+  }
+}
+
+export async function adminMiddlewareWithCheck(req: AdminRequest, res: Response, next: NextFunction): Promise<void> {
+  const authHeader = req.headers.authorization
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ success: false, error: 'Unauthorized' })
+    return
+  }
+
+  const token = authHeader.split(' ')[1]
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string }
+    const [rows] = await db.query<any[]>('SELECT id, email, is_admin, is_banned FROM users WHERE id = ?', [decoded.id])
+    const user = rows[0]
 
     if (!user || user.is_banned) {
       res.status(403).json({ success: false, error: 'Account is banned' })

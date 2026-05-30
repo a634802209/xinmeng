@@ -9,17 +9,11 @@ export interface Notification {
   createdAt: string
 }
 
-export function getNotifications(userId: number, limit: number = 20): Notification[] {
-  const rows = db.prepare(
-    'SELECT id, title, content, type, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
-  ).all(userId, limit) as Array<{
-    id: number
-    title: string
-    content: string
-    type: string
-    is_read: number
-    created_at: string
-  }>
+export async function getNotifications(userId: number, limit: number = 20): Promise<Notification[]> {
+  const [rows] = await db.query<any[]>(
+    'SELECT id, title, content, type, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
+    [userId, limit]
+  )
 
   return rows.map((r) => ({
     id: r.id,
@@ -31,23 +25,25 @@ export function getNotifications(userId: number, limit: number = 20): Notificati
   }))
 }
 
-export function getUnreadCount(userId: number): number {
-  const result = db.prepare(
-    'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0'
-  ).get(userId) as { count: number }
-  return result.count
+export async function getUnreadCount(userId: number): Promise<number> {
+  const [rows] = await db.query<any[]>(
+    'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0',
+    [userId]
+  )
+  return rows[0].count
 }
 
-export function markAsRead(notificationId: number, userId: number): void {
-  db.prepare('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?').run(notificationId, userId)
+export async function markAsRead(notificationId: number, userId: number): Promise<void> {
+  await db.execute('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?', [notificationId, userId])
 }
 
-export function markAllAsRead(userId: number): void {
-  db.prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ?').run(userId)
+export async function markAllAsRead(userId: number): Promise<void> {
+  await db.execute('UPDATE notifications SET is_read = 1 WHERE user_id = ?', [userId])
 }
 
-export function createNotification(userId: number, title: string, content: string, type: string = 'system'): void {
-  db.prepare(
-    'INSERT INTO notifications (user_id, title, content, type) VALUES (?, ?, ?, ?)'
-  ).run(userId, title, content, type)
+export async function createNotification(userId: number, title: string, content: string, type: string = 'system'): Promise<void> {
+  await db.execute(
+    'INSERT INTO notifications (user_id, title, content, type) VALUES (?, ?, ?, ?)',
+    [userId, title, content, type]
+  )
 }

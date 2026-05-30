@@ -5,26 +5,25 @@ import { authMiddleware, type AuthRequest } from '../middleware/auth.js'
 
 const router = Router()
 
-// 获取用户的画布项目列表
-router.get('/projects', authMiddleware, (req: AuthRequest, res: Response): void => {
+router.get('/projects', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id
-  const projects = db.prepare(
-    'SELECT id, name, created_at, updated_at FROM canvas_projects WHERE user_id = ? ORDER BY updated_at DESC'
-  ).all(userId) as Array<{ id: number; name: string; created_at: string; updated_at: string }>
+  const [rows] = await db.query<any[]>(
+    'SELECT id, name, created_at, updated_at FROM canvas_projects WHERE user_id = ? ORDER BY updated_at DESC',
+    [userId]
+  )
 
-  res.json({ success: true, data: projects })
+  res.json({ success: true, data: rows })
 })
 
-// 获取单个画布项目
-router.get('/projects/:id', authMiddleware, (req: AuthRequest, res: Response): void => {
+router.get('/projects/:id', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id
   const projectId = parseInt(req.params.id)
 
-  const project = db.prepare(
-    'SELECT * FROM canvas_projects WHERE id = ? AND user_id = ?'
-  ).get(projectId, userId) as
-    | { id: number; name: string; nodes: string; connections: string; created_at: string; updated_at: string }
-    | undefined
+  const [rows] = await db.query<any[]>(
+    'SELECT * FROM canvas_projects WHERE id = ? AND user_id = ?',
+    [projectId, userId]
+  )
+  const project = rows[0]
 
   if (!project) {
     res.status(404).json({ success: false, error: 'Project not found' })
@@ -41,8 +40,7 @@ router.get('/projects/:id', authMiddleware, (req: AuthRequest, res: Response): v
   })
 })
 
-// 创建画布项目
-router.post('/projects', authMiddleware, (req: AuthRequest, res: Response): void => {
+router.post('/projects', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id
   const { name, nodes, connections } = req.body
 
@@ -55,15 +53,15 @@ router.post('/projects', authMiddleware, (req: AuthRequest, res: Response): void
     return
   }
 
-  const result = db.prepare(
-    'INSERT INTO canvas_projects (user_id, name, nodes, connections) VALUES (?, ?, ?, ?)'
-  ).run(userId, name, JSON.stringify(nodes), JSON.stringify(connections))
+  const result = await db.execute(
+    'INSERT INTO canvas_projects (user_id, name, nodes, connections) VALUES (?, ?, ?, ?)',
+    [userId, name, JSON.stringify(nodes), JSON.stringify(connections)]
+  )
 
-  res.json({ success: true, data: { id: result.lastInsertRowid } })
+  res.json({ success: true, data: { id: Number(result.insertId) } })
 })
 
-// 更新画布项目
-router.put('/projects/:id', authMiddleware, (req: AuthRequest, res: Response): void => {
+router.put('/projects/:id', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id
   const projectId = parseInt(req.params.id)
   if (isNaN(projectId) || projectId <= 0) {
@@ -72,11 +70,8 @@ router.put('/projects/:id', authMiddleware, (req: AuthRequest, res: Response): v
   }
   const { name, nodes, connections } = req.body
 
-  const project = db.prepare('SELECT id FROM canvas_projects WHERE id = ? AND user_id = ?').get(projectId, userId) as
-    | { id: number }
-    | undefined
-
-  if (!project) {
+  const [projectRows] = await db.query<any[]>('SELECT id FROM canvas_projects WHERE id = ? AND user_id = ?', [projectId, userId])
+  if (!projectRows[0]) {
     res.status(404).json({ success: false, error: 'Project not found' })
     return
   }
@@ -117,17 +112,16 @@ router.put('/projects/:id', authMiddleware, (req: AuthRequest, res: Response): v
   updates.push('updated_at = CURRENT_TIMESTAMP')
   params.push(projectId)
 
-  db.prepare(`UPDATE canvas_projects SET ${updates.join(', ')} WHERE id = ?`).run(...params)
+  await db.execute(`UPDATE canvas_projects SET ${updates.join(', ')} WHERE id = ?`, params)
 
   res.json({ success: true })
 })
 
-// 删除画布项目
-router.delete('/projects/:id', authMiddleware, (req: AuthRequest, res: Response): void => {
+router.delete('/projects/:id', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.user!.id
   const projectId = parseInt(req.params.id)
 
-  db.prepare('DELETE FROM canvas_projects WHERE id = ? AND user_id = ?').run(projectId, userId)
+  await db.execute('DELETE FROM canvas_projects WHERE id = ? AND user_id = ?', [projectId, userId])
 
   res.json({ success: true })
 })

@@ -9,19 +9,13 @@ export interface ChatMessage {
   createdAt: string
 }
 
-export function getChatHistory(userId: number, limit: number = 50): ChatMessage[] {
-  const messages = db.prepare(
-    'SELECT id, role, content, model, tokens_used, created_at FROM chat_messages WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
-  ).all(userId, limit) as Array<{
-    id: number
-    role: string
-    content: string
-    model: string | null
-    tokens_used: number
-    created_at: string
-  }>
+export async function getChatHistory(userId: number, limit: number = 50): Promise<ChatMessage[]> {
+  const [rows] = await db.query<any[]>(
+    'SELECT id, role, content, model, tokens_used, created_at FROM chat_messages WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
+    [userId, limit]
+  )
 
-  return messages.reverse().map((m) => ({
+  return rows.reverse().map((m) => ({
     id: m.id,
     role: m.role,
     content: m.content,
@@ -31,13 +25,14 @@ export function getChatHistory(userId: number, limit: number = 50): ChatMessage[
   }))
 }
 
-export function addChatMessage(userId: number, role: string, content: string, model?: string, tokensUsed?: number): ChatMessage {
-  const result = db.prepare(
-    'INSERT INTO chat_messages (user_id, role, content, model, tokens_used) VALUES (?, ?, ?, ?, ?)'
-  ).run(userId, role, content, model || null, tokensUsed || 0)
+export async function addChatMessage(userId: number, role: string, content: string, model?: string, tokensUsed?: number): Promise<ChatMessage> {
+  const result = await db.execute(
+    'INSERT INTO chat_messages (user_id, role, content, model, tokens_used) VALUES (?, ?, ?, ?, ?)',
+    [userId, role, content, model || null, tokensUsed || 0]
+  )
 
   return {
-    id: Number(result.lastInsertRowid),
+    id: Number(result.insertId),
     role,
     content,
     model: model || null,
@@ -46,6 +41,6 @@ export function addChatMessage(userId: number, role: string, content: string, mo
   }
 }
 
-export function clearChatHistory(userId: number): void {
-  db.prepare('DELETE FROM chat_messages WHERE user_id = ?').run(userId)
+export async function clearChatHistory(userId: number): Promise<void> {
+  await db.execute('DELETE FROM chat_messages WHERE user_id = ?', [userId])
 }

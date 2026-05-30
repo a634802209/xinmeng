@@ -12,7 +12,7 @@ export interface Template {
   usageCount: number
 }
 
-export function getTemplates(category?: string, type?: string): Template[] {
+export async function getTemplates(category?: string, type?: string): Promise<Template[]> {
   let sql = 'SELECT * FROM templates WHERE 1=1'
   const params: (string | number)[] = []
 
@@ -27,17 +27,7 @@ export function getTemplates(category?: string, type?: string): Template[] {
 
   sql += ' ORDER BY is_hot DESC, usage_count DESC'
 
-  const rows = db.prepare(sql).all(...params) as Array<{
-    id: number
-    name: string
-    description: string | null
-    category: string
-    thumbnail: string | null
-    prompt: string
-    type: string
-    is_hot: number
-    usage_count: number
-  }>
+  const [rows] = await db.query<any[]>(sql, params)
 
   return rows.map((r) => ({
     id: r.id,
@@ -52,20 +42,9 @@ export function getTemplates(category?: string, type?: string): Template[] {
   }))
 }
 
-export function getTemplateById(id: number): Template | undefined {
-  const row = db.prepare('SELECT * FROM templates WHERE id = ?').get(id) as
-    | {
-        id: number
-        name: string
-        description: string | null
-        category: string
-        thumbnail: string | null
-        prompt: string
-        type: string
-        is_hot: number
-        usage_count: number
-      }
-    | undefined
+export async function getTemplateById(id: number): Promise<Template | undefined> {
+  const [rows] = await db.query<any[]>('SELECT * FROM templates WHERE id = ?', [id])
+  const row = rows[0]
 
   if (!row) return undefined
 
@@ -82,6 +61,6 @@ export function getTemplateById(id: number): Template | undefined {
   }
 }
 
-export function incrementUsageCount(id: number): void {
-  db.prepare('UPDATE templates SET usage_count = usage_count + 1 WHERE id = ?').run(id)
+export async function incrementUsageCount(id: number): Promise<void> {
+  await db.execute('UPDATE templates SET usage_count = usage_count + 1 WHERE id = ?', [id])
 }

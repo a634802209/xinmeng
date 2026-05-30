@@ -10,20 +10,13 @@ export interface Work {
   createdAt: string
 }
 
-export function getWorksByUser(userId: number, limit: number = 50): Work[] {
-  const works = db
-    .prepare('SELECT * FROM works WHERE user_id = ? ORDER BY created_at DESC LIMIT ?')
-    .all(userId, limit) as Array<{
-      id: number
-      type: string
-      prompt: string
-      result_url: string
-      thumbnail_url: string
-      status: string
-      created_at: string
-    }>
+export async function getWorksByUser(userId: number, limit: number = 50): Promise<Work[]> {
+  const [rows] = await db.query<any[]>(
+    'SELECT * FROM works WHERE user_id = ? ORDER BY created_at DESC LIMIT ?',
+    [userId, limit]
+  )
 
-  return works.map((w) => ({
+  return rows.map((w) => ({
     id: w.id,
     type: w.type,
     prompt: w.prompt,
@@ -34,29 +27,28 @@ export function getWorksByUser(userId: number, limit: number = 50): Work[] {
   }))
 }
 
-export function getWorkById(workId: number) {
-  return db.prepare('SELECT * FROM works WHERE id = ?').get(workId) as
-    | { id: number; user_id: number }
-    | undefined
+export async function getWorkById(workId: number) {
+  const [rows] = await db.query<any[]>('SELECT * FROM works WHERE id = ?', [workId])
+  return rows[0] || undefined
 }
 
-export function deleteWork(workId: number): void {
-  db.prepare('DELETE FROM works WHERE id = ?').run(workId)
+export async function deleteWork(workId: number): Promise<void> {
+  await db.execute('DELETE FROM works WHERE id = ?', [workId])
 }
 
-export function createWork(userId: number, type: string, prompt: string, status: string = 'processing'): number {
-  const result = db.prepare('INSERT INTO works (user_id, type, prompt, status) VALUES (?, ?, ?, ?)').run(
-    userId, type, prompt, status
-  )
-  return Number(result.lastInsertRowid)
+export async function createWork(userId: number, type: string, prompt: string, status: string = 'processing'): Promise<number> {
+  const result = await db.execute('INSERT INTO works (user_id, type, prompt, status) VALUES (?, ?, ?, ?)', [
+    userId, type, prompt, status,
+  ])
+  return Number(result.insertId)
 }
 
-export function updateWorkStatus(workId: number, status: string, resultUrl?: string, thumbnailUrl?: string): void {
+export async function updateWorkStatus(workId: number, status: string, resultUrl?: string, thumbnailUrl?: string): Promise<void> {
   if (resultUrl && thumbnailUrl) {
-    db.prepare('UPDATE works SET status = ?, result_url = ?, thumbnail_url = ? WHERE id = ?').run(
-      status, resultUrl, thumbnailUrl, workId
-    )
+    await db.execute('UPDATE works SET status = ?, result_url = ?, thumbnail_url = ? WHERE id = ?', [
+      status, resultUrl, thumbnailUrl, workId,
+    ])
   } else {
-    db.prepare('UPDATE works SET status = ? WHERE id = ?').run(status, workId)
+    await db.execute('UPDATE works SET status = ? WHERE id = ?', [status, workId])
   }
 }

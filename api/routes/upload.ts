@@ -70,16 +70,14 @@ router.post('/work', authMiddleware, upload.single('file'), async (req: AuthRequ
 
     const workType = type || (req.file.mimetype.startsWith('video') ? 'video' : 'image')
 
-    // P0 修复：is_public 默认改为 0，由用户显式设置
-    const result = db
-      .prepare(
-        'INSERT INTO works (user_id, type, prompt, result_url, thumbnail_url, status, is_public, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      )
-      .run(user.id, workType, prompt || '', fileUrl, fileUrl, 'completed', 0, category || null)
+    const result = await db.execute(
+      'INSERT INTO works (user_id, type, prompt, result_url, thumbnail_url, status, is_public, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [user.id, workType, prompt || '', fileUrl, fileUrl, 'completed', 0, category || null]
+    )
 
     success(res, {
       work: {
-        id: result.lastInsertRowid,
+        id: Number(result.insertId),
         type: workType,
         prompt: prompt || '',
         resultUrl: fileUrl,

@@ -27,12 +27,32 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   const token = authHeader.substring(7)
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string; isAdmin?: boolean }
-    // Check if user is banned
-    const user = db.prepare('SELECT is_banned FROM users WHERE id = ?').get(decoded.id) as { is_banned: number } | undefined
+    req.user = decoded
+    next()
+  } catch {
+    res.status(401).json({ success: false, error: 'Invalid token' })
+    return
+  }
+}
+
+export async function authMiddlewareWithBanCheck(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ success: false, error: 'Unauthorized' })
+    return
+  }
+
+  const token = authHeader.substring(7)
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: number; email: string; isAdmin?: boolean }
+
+    const [rows] = await db.query<any[]>('SELECT is_banned FROM users WHERE id = ?', [decoded.id])
+    const user = rows[0]
     if (!user || user.is_banned) {
       res.status(403).json({ success: false, error: 'Account is banned' })
       return
     }
+
     req.user = decoded
     next()
   } catch {

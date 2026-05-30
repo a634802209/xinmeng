@@ -21,7 +21,7 @@ export function getRechargePackages(): RechargePackage[] {
   ]
 }
 
-export function createPaymentOrder(userId: number, packageId: number) {
+export async function createPaymentOrder(userId: number, packageId: number) {
   const packages = getRechargePackages()
   const pkg = packages.find((p) => p.id === packageId)
   if (!pkg) {
@@ -31,12 +31,13 @@ export function createPaymentOrder(userId: number, packageId: number) {
   const orderNo = `PAY${Date.now()}${Math.floor(Math.random() * 1000)}`
   const totalCredits = pkg.credits + pkg.bonus
 
-  const result = db.prepare(
-    'INSERT INTO payments (user_id, order_no, amount, credits, status) VALUES (?, ?, ?, ?, ?)'
-  ).run(userId, orderNo, pkg.price, totalCredits, 'pending')
+  const result = await db.execute(
+    'INSERT INTO payments (user_id, order_no, amount, credits, status) VALUES (?, ?, ?, ?, ?)',
+    [userId, orderNo, pkg.price, totalCredits, 'pending']
+  )
 
   return {
-    orderId: Number(result.lastInsertRowid),
+    orderId: Number(result.insertId),
     orderNo,
     amount: pkg.price,
     credits: totalCredits,
@@ -44,10 +45,9 @@ export function createPaymentOrder(userId: number, packageId: number) {
   }
 }
 
-export function processPaymentCallback(orderNo: string, paymentMethod: string) {
-  const payment = db.prepare('SELECT * FROM payments WHERE order_no = ?').get(orderNo) as
-    | { id: number; user_id: number; amount: number; credits: number; status: string }
-    | undefined
+export async function processPaymentCallback(orderNo: string, paymentMethod: string) {
+  const [rows] = await db.query<any[]>('SELECT * FROM payments WHERE order_no = ?', [orderNo])
+  const payment = rows[0]
 
   if (!payment) {
     throw new Error('Order not found')
@@ -57,22 +57,24 @@ export function processPaymentCallback(orderNo: string, paymentMethod: string) {
     throw new Error('Order already paid')
   }
 
-  db.prepare('UPDATE payments SET status = ?, payment_method = ?, paid_at = ? WHERE order_no = ?').run(
-    'completed', paymentMethod, new Date().toISOString(), orderNo
-  )
+  await db.execute('UPDATE payments SET status = ?, payment_method = ?, paid_at = ? WHERE order_no = ?', [
+    'completed', paymentMethod, new Date().toISOString(), orderNo,
+  ])
 
-  const user = getUserById(payment.user_id)
+  const user = await getUserById(payment.user_id)
   if (user) {
     const newBalance = user.credits + payment.credits
-    updateUserCredits(payment.user_id, newBalance)
-    addCreditRecord(payment.user_id, 'recharge', payment.credits, newBalance, `充值 - ${paymentMethod}`)
+    await updateUserCredits(payment.user_id, newBalance)
+    await addCreditRecord(payment.user_id, 'recharge', payment.credits, newBalance, `充值 - ${paymentMethod}`)
   }
 
   return { success: true, credits: payment.credits }
 }
 
-export function getPaymentOrders(userId: number) {
-  return db.prepare(
-    'SELECT id, order_no, amount, credits, status, payment_method, paid_at, created_at FROM payments WHERE user_id = ? ORDER BY created_at DESC'
-  ).all(userId)
+export async function getPaymentOrders(userId: number) {
+  const [rows] = await db.query<any[]>(
+    'SELECT id, order_no, amount, credits, status, payment_method, paid_at, created_at FROM payments WHERE user_id = ? ORDER BY created_at DESC',
+    [userId]
+  )
+  return rows
 }
