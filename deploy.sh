@@ -62,7 +62,10 @@ fi
 
 log "克隆项目代码..."
 mkdir -p "$PROJECT_DIR"
-git clone --depth 1 https://github.com/a634802209/xinmeng.git "$PROJECT_DIR"
+git clone --depth 1 git@github.com:a634802209/xinmeng.git "$PROJECT_DIR" 2>/dev/null || {
+    log "SSH 方式失败，尝试 HTTPS..."
+    git clone --depth 1 https://github.com/a634802209/xinmeng.git "$PROJECT_DIR"
+}
 cd "$PROJECT_DIR"
 ok "代码克隆完成"
 
